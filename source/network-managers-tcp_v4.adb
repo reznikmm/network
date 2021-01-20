@@ -397,9 +397,27 @@ package body Network.Managers.TCP_V4 is
    overriding function Remote (Self : Out_Socket)
      return Network.Addresses.Address
    is
+      Result : League.Strings.Universal_String;
+      Value  : GNAT.Sockets.Sock_Addr_Type;
    begin
-      return Network.Addresses.To_Address
-        (League.Strings.Empty_Universal_String);
+      Value := GNAT.Sockets.Get_Peer_Name (Self.Internal);
+      Result.Append ("/ip4/");
+      Result.Append
+        (League.Strings.From_UTF_8_String (GNAT.Sockets.Image (Value.Addr)));
+      Result.Append ("/tcp/");
+
+      declare
+         Port : constant Wide_Wide_String := Value.Port'Wide_Wide_Image;
+      begin
+         Result.Append (Port (2 .. Port'Last));
+
+         return Network.Addresses.To_Address (Result);
+      end;
+
+   exception
+      when GNAT.Sockets.Socket_Error =>
+         return Network.Addresses.To_Address
+           (League.Strings.Empty_Universal_String);
    end Remote;
 
    ------------------------
@@ -410,7 +428,6 @@ package body Network.Managers.TCP_V4 is
      (Self  : in out Out_Socket;
       Value : Network.Streams.Input_Listener_Access) is
    begin
-      pragma Assert (Self.Listener = null);
       pragma Assert (not Self.Promise.Is_Pending);
       Self.Listener := Network.Connections.Listener_Access (Value);
 

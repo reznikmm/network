@@ -5,12 +5,15 @@
 -------------------------------------------------------------
 
 with Ada.Text_IO;
+with Ada.Wide_Wide_Text_IO;
 with Ada.Streams;
 
 with League.String_Vectors;
 with League.Characters.Latin;
 with League.Text_Codecs;
 with League.Stream_Element_Vectors;
+
+with Network.Addresses;
 
 package body Listeners is
 
@@ -33,7 +36,10 @@ package body Listeners is
       List : League.String_Vectors.Universal_String_Vector;
       CRLF : League.Strings.Universal_String;
    begin
-      Ada.Text_IO.Put_Line ("Connected");
+      Ada.Wide_Wide_Text_IO.Put ("Connected to ");
+      Ada.Wide_Wide_Text_IO.Put_Line
+        (Network.Addresses.To_String (Value.Remote).To_Wide_Wide_String);
+
       Self.Remote := Value;
       Value.Set_Listener (Self'Unchecked_Access);
       CRLF.Append (League.Characters.Latin.Carriage_Return);

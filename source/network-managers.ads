@@ -14,6 +14,26 @@ with Network.Polls;
 package Network.Managers is
    pragma Preelaborate;
 
+   type Manager is tagged limited private;
+   --  Network connection manager
+
+   procedure Initialize (Self : in out Manager'Class);
+   --  Call Initialize before use
+
+   procedure Connect
+     (Self    : in out Manager'Class;
+      Address : Network.Addresses.Address;
+      Error   : out League.Strings.Universal_String;
+      Promise : out Connection_Promises.Promise;
+      Options : League.String_Vectors.Universal_String_Vector :=
+        League.String_Vectors.Empty_Universal_String_Vector);
+   --  Try to connect to given address asynchronously. Return a connection
+   --  promise or an Error if the address isn't supported. The promise will
+   --  be resolved with a connection or rejected with an error. On successful
+   --  connect the application should set a listener to the connection. After
+   --  that it could write and read data until get a close event. Options are
+   --  protocol dependent.
+
    type Connection_Listener is limited interface;
    type Connection_Listener_Access is access all Connection_Listener'Class
      with Storage_Size => 0;
@@ -25,12 +45,6 @@ package Network.Managers is
    --  Once the manager accepts a new connection. It should assign a listener
    --  to the connection.
 
-   type Manager is tagged limited private;
-   --  Network connection manager
-
-   procedure Initialize (Self : in out Manager'Class);
-   --  Call Initialize before use
-
    procedure Listen
      (Self     : in out Manager'Class;
       List     : Network.Addresses.Address_Array;
@@ -40,20 +54,6 @@ package Network.Managers is
         League.String_Vectors.Empty_Universal_String_Vector);
    --  Make manager to listen given network addresses and call listener on
    --  new incoming connection. Return Error if some address isn't supported.
-   --  Options are protocol dependent.
-
-   procedure Connect
-     (Self    : in out Manager'Class;
-      Address : Network.Addresses.Address;
-      Error   : out League.Strings.Universal_String;
-      Promise : out Connection_Promises.Promise;
-      Options : League.String_Vectors.Universal_String_Vector :=
-        League.String_Vectors.Empty_Universal_String_Vector);
-   --  Try to connect given address asynchronously. Return a connection promise
-   --  or an Error if the address isn't supported. The connection will be
-   --  resolved with a connection or rejected with an error. On successful
-   --  connect the application should set a listener to the connection. After
-   --  that it could write and read data until get a close event.
    --  Options are protocol dependent.
 
    procedure Wait

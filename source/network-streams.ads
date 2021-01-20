@@ -10,6 +10,10 @@ with League.Strings;
 package Network.Streams is
    pragma Preelaborate;
 
+   ------------------
+   -- Input Stream --
+   ------------------
+
    type Input_Listener is limited interface;
    --  Input stream event listener
 
@@ -57,6 +61,10 @@ package Network.Streams is
      with Pre'Class => not Self.Is_Closed,
           Post'Class => Self.Is_Closed;
    --  Close the Stream
+
+   -------------------
+   -- Output Stream --
+   -------------------
 
    type Output_Listener is limited interface;
    --  Output Stream event listener
