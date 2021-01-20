@@ -8,6 +8,7 @@ with League.Strings;
 
 with Network.Addresses;
 with Network.Connections;
+with Network.Connection_Promises;
 with Network.Polls;
 
 package Network.Managers is
@@ -45,14 +46,14 @@ package Network.Managers is
      (Self    : in out Manager'Class;
       Address : Network.Addresses.Address;
       Error   : out League.Strings.Universal_String;
-      Result  : out Network.Connections.Connection_Access;
+      Promise : out Connection_Promises.Promise;
       Options : League.String_Vectors.Universal_String_Vector :=
         League.String_Vectors.Empty_Universal_String_Vector);
-   --  Try to connect given address asynchronously. Return a connection or
-   --  Error if the address isn't supported.
-   --  The connection stays closed until a listener is assigned to it, then
-   --  it reports a connection event to the listener or a close event if
-   --  connection fails.
+   --  Try to connect given address asynchronously. Return a connection promise
+   --  or an Error if the address isn't supported. The connection will be
+   --  resolved with a connection or rejected with an error. On successful
+   --  connect the application should set a listener to the connection. After
+   --  that it could write and read data until get a close event.
    --  Options are protocol dependent.
 
    procedure Wait
@@ -85,9 +86,9 @@ private
    not overriding procedure Connect
      (Self    : in out Protocol;
       Address : Network.Addresses.Address;
-      Poll     : in out Network.Polls.Poll;
+      Poll    : in out Network.Polls.Poll;
       Error   : out League.Strings.Universal_String;
-      Result  : out Network.Connections.Connection_Access;
+      Promise : out Connection_Promises.Promise;
       Options : League.String_Vectors.Universal_String_Vector :=
         League.String_Vectors.Empty_Universal_String_Vector) is abstract;
 

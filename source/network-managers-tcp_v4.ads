@@ -33,9 +33,9 @@ private
    overriding procedure Connect
      (Self    : in out Protocol;
       Address : Network.Addresses.Address;
-      Poll     : in out Network.Polls.Poll;
+      Poll    : in out Network.Polls.Poll;
       Error   : out League.Strings.Universal_String;
-      Result  : out Network.Connections.Connection_Access;
+      Promise : out Network.Connection_Promises.Promise;
       Options : League.String_Vectors.Universal_String_Vector :=
         League.String_Vectors.Empty_Universal_String_Vector);
 

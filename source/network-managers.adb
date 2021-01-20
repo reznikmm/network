@@ -13,14 +13,14 @@ package body Network.Managers is
      (Self    : in out Manager'Class;
       Address : Network.Addresses.Address;
       Error   : out League.Strings.Universal_String;
-      Result  : out Network.Connections.Connection_Access;
+      Promise : out Connection_Promises.Promise;
       Options : League.String_Vectors.Universal_String_Vector :=
         League.String_Vectors.Empty_Universal_String_Vector)
    is
    begin
       for Proto of Self.Proto (1 .. Self.Last) loop
          if Proto.Can_Connect (Address) then
-            Proto.Connect (Address, Self.Poll, Error, Result, Options);
+            Proto.Connect (Address, Self.Poll, Error, Promise, Options);
 
             return;
          end if;

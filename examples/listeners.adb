@@ -18,19 +18,24 @@ package body Listeners is
      return League.Strings.Universal_String
        renames League.Strings.To_Universal_String;
 
-   ---------------
-   -- Connected --
-   ---------------
+   overriding procedure On_Reject
+     (Self  : in out Listener;
+      Value : League.Strings.Universal_String) renames Closed;
 
-   overriding procedure Connected
-     (Self   : in out Listener;
-      Remote : Network.Addresses.Address)
+   ----------------
+   -- On_Resolve --
+   ----------------
+
+   overriding procedure On_Resolve
+     (Self  : in out Listener;
+      Value : Network.Connections.Connection_Access)
    is
-      pragma Unreferenced (Remote);
       List : League.String_Vectors.Universal_String_Vector;
       CRLF : League.Strings.Universal_String;
    begin
       Ada.Text_IO.Put_Line ("Connected");
+      Self.Remote := Value;
+      Value.Set_Listener (Self'Unchecked_Access);
       CRLF.Append (League.Characters.Latin.Carriage_Return);
       CRLF.Append (League.Characters.Latin.Line_Feed);
       List.Append (+"GET / HTTP/1.1");
@@ -44,11 +49,11 @@ package body Listeners is
            League.Text_Codecs.Codec_For_Application_Locale.Encode
              (List.Join (CRLF)).To_Stream_Element_Array;
       begin
-         Self.Connect.Write (Data, Last);
+         Self.Remote.Write (Data, Last);
          Ada.Text_IO.Put_Line (Last'Image);
          Ada.Streams.Stream_IO.Create (Self.Output, Name => "/tmp/aaa.bin");
       end;
-   end Connected;
+   end On_Resolve;
 
    ------------
    -- Closed --
@@ -61,6 +66,7 @@ package body Listeners is
       pragma Unreferenced (Self);
    begin
       Ada.Text_IO.Put_Line ("Closed: " & Error.To_UTF_8_String);
+      Self.Done := True;
    end Closed;
 
    ---------------
@@ -87,7 +93,7 @@ package body Listeners is
       Ada.Text_IO.Put_Line ("Can_Read");
 
       loop
-         Self.Connect.Read (Data, Last);
+         Self.Remote.Read (Data, Last);
          Ada.Streams.Stream_IO.Write (Self.Output, Data (1 .. Last));
          exit when Last < Data'First;
          Count := Count + 1;

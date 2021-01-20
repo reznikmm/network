@@ -9,20 +9,22 @@ with Ada.Streams;
 with GNAT.Sockets;
 with Interfaces.C;
 
+with Network.Streams;
+
 package body Network.Managers.TCP_V4 is
 
    type Out_Socket (Poll : Network.Polls.Poll_Access) is
-     new Network.Polls.Listener
+     limited new Network.Polls.Listener
        and Network.Connections.Connection with
    record
-      Listener   : Network.Connections.Event_Listener_Access;
-      --  if Listener = null then Is_Closed = True
+      Promise    : aliased Connection_Promises.Controller;
       Error      : League.Strings.Universal_String;
       Internal   : GNAT.Sockets.Socket_Type;
       Events     : Network.Polls.Event_Set := (others => False);
-      Is_Closed  : Boolean := True;  --  Not open or closed already
-      Connecting : Boolean := True;  --  In connection phase
+      Is_Closed  : Boolean := False;  --  Has been closed already
       In_Event   : Boolean := False;  --  Inside On_Event
+      Remote     : Network.Addresses.Address;
+      Listener   : Network.Streams.Event_Listener_Access;
    end record;
 
    type Out_Socket_Access is access all Out_Socket;
@@ -31,7 +33,9 @@ package body Network.Managers.TCP_V4 is
 
    overriding procedure Set_Listener
      (Self     : in out Out_Socket;
-      Listener : Network.Connections.Event_Listener_Access);
+      Listener : Network.Streams.Event_Listener_Access);
+
+   overriding function Has_Listener (Self : Out_Socket) return Boolean;
 
    overriding procedure On_Event
      (Self   : in out Out_Socket;
@@ -48,6 +52,9 @@ package body Network.Managers.TCP_V4 is
       Last : out Ada.Streams.Stream_Element_Offset);
 
    overriding procedure Close (Self : in out Out_Socket);
+
+   overriding function Remote (Self : Out_Socket)
+     return Network.Addresses.Address;
 
    procedure Change_Watch
      (Self : in out Out_Socket'Class;
@@ -101,6 +108,7 @@ package body Network.Managers.TCP_V4 is
         (Set,
          Interfaces.C.int (GNAT.Sockets.To_C (Self.Internal)),
          Self'Unchecked_Access);
+
       Self.Events := Set;
    end Change_Watch;
 
@@ -126,7 +134,7 @@ package body Network.Managers.TCP_V4 is
       Address : Network.Addresses.Address;
       Poll    : in out Network.Polls.Poll;
       Error   : out League.Strings.Universal_String;
-      Result  : out Network.Connections.Connection_Access;
+      Promise : out Network.Connection_Promises.Promise;
       Options : League.String_Vectors.Universal_String_Vector :=
         League.String_Vectors.Empty_Universal_String_Vector)
    is
@@ -167,18 +175,29 @@ package body Network.Managers.TCP_V4 is
 
       Socket := new Out_Socket (Poll'Unchecked_Access);
       Socket.Internal := Internal;
+      Socket.Events := (Network.Polls.Output => True, others => False);
 
       Poll.Watch
         (Interfaces.C.int (GNAT.Sockets.To_C (Internal)),
-         Events   => (Network.Polls.Output => True, others => False),
+         Events   => Socket.Events,
          Listener => Socket.all'Access);
 
-      Result := Socket.all'Access;
+      Promise := Socket.Promise.To_Promise;
    exception
       when E : GNAT.Sockets.Socket_Error =>
          Error := League.Strings.From_UTF_8_String
            (Ada.Exceptions.Exception_Message (E));
    end Connect;
+
+   ------------------
+   -- Has_Listener --
+   ------------------
+
+   overriding function Has_Listener (Self : Out_Socket) return Boolean is
+      use type Network.Streams.Event_Listener_Access;
+   begin
+      return Self.Listener /= null;
+   end Has_Listener;
 
    ---------------
    -- Is_Closed --
@@ -215,7 +234,7 @@ package body Network.Managers.TCP_V4 is
      (Self   : in out Out_Socket;
       Events : Network.Polls.Event_Set)
    is
-      use type Network.Connections.Event_Listener_Access;
+      use type Network.Streams.Event_Listener_Access;
 
       function Get_Error return League.Strings.Universal_String;
       procedure Disconnect (Error : League.Strings.Universal_String);
@@ -258,28 +277,26 @@ package body Network.Managers.TCP_V4 is
 
       Prev : constant Network.Polls.Event_Set := Self.Events;
    begin
-      if Self.Connecting then
-         Self.Connecting := False;
+      Self.In_Event := True;
+
+      if Self.Promise.Is_Pending then
          Self.Error := Get_Error;
 
          if not Self.Error.Is_Empty then
             Disconnect (Self.Error);
-         elsif Self.Listener = null then
-            Self.Change_Watch ((others => False));
+            Self.Promise.Reject (Self.Error);
          else
-            declare
-               Remote : Network.Addresses.Address;
-            begin
-               Self.Is_Closed := False;
-               Self.Change_Watch (not Write_Event);
-               Self.Listener.Connected (Remote);
-            end;
+            Self.Events := (others => False);
+            Self.Promise.Resolve (Self'Unchecked_Access);
+
+            if Self.Events /= Prev then
+               Self.Change_Watch (Self.Events);
+            end if;
          end if;
       elsif Self.Is_Closed then
          null;
       else
          pragma Assert (Self.Listener /= null);
-         Self.In_Event := True;
          Self.Events := Self.Events and not Events;
 
          if Events (Network.Polls.Input)
@@ -307,9 +324,9 @@ package body Network.Managers.TCP_V4 is
          elsif Self.Events /= Prev then
             Self.Change_Watch (Self.Events);
          end if;
-
-         Self.In_Event := False;
       end if;
+
+      Self.In_Event := False;
    end On_Event;
 
    ----------
@@ -370,31 +387,42 @@ package body Network.Managers.TCP_V4 is
       Manager.Register (new Protocol);
    end Register;
 
+   ------------
+   -- Remote --
+   ------------
+
+   overriding function Remote (Self : Out_Socket)
+     return Network.Addresses.Address
+   is
+   begin
+      return Network.Addresses.To_Address
+        (League.Strings.Empty_Universal_String);
+   end Remote;
+
    ------------------
    -- Set_Listener --
    ------------------
 
    overriding procedure Set_Listener
      (Self     : in out Out_Socket;
-      Listener : Network.Connections.Event_Listener_Access)
+      Listener : Network.Streams.Event_Listener_Access)
    is
-      use type Network.Connections.Event_Listener_Access;
+      use type Network.Streams.Event_Listener_Access;
    begin
       pragma Assert (Self.Listener = null);
+      pragma Assert (not Self.Promise.Is_Pending);
       Self.Listener := Listener;
 
-      if not Self.Connecting then
-         if Self.Error.Is_Empty then
-            declare
-               Remote : Network.Addresses.Address;
-            begin
-               Self.Is_Closed := False;
-               Self.Change_Watch (not Write_Event);
-               Self.Listener.Connected (Remote);
-            end;
+      if Self.Error.Is_Empty then
+         if Self.In_Event then
+            Self.Events := not Write_Event;
          else
-            Listener.Closed (Self.Error);
+            Self.Change_Watch (not Write_Event);
          end if;
+
+         Listener.Can_Write;
+      else
+         Listener.Closed (Self.Error);
       end if;
    end Set_Listener;
 

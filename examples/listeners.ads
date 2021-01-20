@@ -7,19 +7,28 @@
 with Ada.Streams.Stream_IO;
 with League.Strings;
 
+with Network.Connection_Promises;
 with Network.Connections;
-with Network.Addresses;
+with Network.Streams;
 
 package Listeners is
 
-   type Listener (Connect : not null Network.Connections.Connection_Access)
-   is limited new Network.Connections.Event_Listener with record
-      Output : Ada.Streams.Stream_IO.File_Type;
+   type Listener is limited new Network.Connection_Promises.Listener
+     and Network.Streams.Event_Listener
+   with record
+      Promise : Network.Connection_Promises.Promise;
+      Remote  : Network.Connections.Connection_Access;
+      Output  : Ada.Streams.Stream_IO.File_Type;
+      Done    : Boolean := False;
    end record;
 
-   overriding procedure Connected
-     (Self   : in out Listener;
-      Remote : Network.Addresses.Address);
+   overriding procedure On_Resolve
+     (Self  : in out Listener;
+      Value : Network.Connections.Connection_Access);
+
+   overriding procedure On_Reject
+     (Self  : in out Listener;
+      Value : League.Strings.Universal_String);
 
    overriding procedure Closed
      (Self  : in out Listener;
