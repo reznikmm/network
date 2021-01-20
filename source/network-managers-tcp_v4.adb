@@ -13,6 +13,8 @@ with Network.Streams;
 
 package body Network.Managers.TCP_V4 is
 
+   use type Network.Connections.Listener_Access;
+
    type Out_Socket (Poll : Network.Polls.Poll_Access) is
      limited new Network.Polls.Listener
        and Network.Connections.Connection with
@@ -24,16 +26,20 @@ package body Network.Managers.TCP_V4 is
       Is_Closed  : Boolean := False;  --  Has been closed already
       In_Event   : Boolean := False;  --  Inside On_Event
       Remote     : Network.Addresses.Address;
-      Listener   : Network.Streams.Event_Listener_Access;
+      Listener   : Network.Connections.Listener_Access;
    end record;
 
    type Out_Socket_Access is access all Out_Socket;
 
    overriding function Is_Closed (Self : Out_Socket) return Boolean;
 
-   overriding procedure Set_Listener
-     (Self     : in out Out_Socket;
-      Listener : Network.Streams.Event_Listener_Access);
+   overriding procedure Set_Input_Listener
+     (Self  : in out Out_Socket;
+      Value : Network.Streams.Input_Listener_Access);
+
+   overriding procedure Set_Output_Listener
+     (Self  : in out Out_Socket;
+      Value : Network.Streams.Output_Listener_Access);
 
    overriding function Has_Listener (Self : Out_Socket) return Boolean;
 
@@ -194,7 +200,6 @@ package body Network.Managers.TCP_V4 is
    ------------------
 
    overriding function Has_Listener (Self : Out_Socket) return Boolean is
-      use type Network.Streams.Event_Listener_Access;
    begin
       return Self.Listener /= null;
    end Has_Listener;
@@ -234,8 +239,6 @@ package body Network.Managers.TCP_V4 is
      (Self   : in out Out_Socket;
       Events : Network.Polls.Event_Set)
    is
-      use type Network.Streams.Event_Listener_Access;
-
       function Get_Error return League.Strings.Universal_String;
       procedure Disconnect (Error : League.Strings.Universal_String);
 
@@ -399,19 +402,17 @@ package body Network.Managers.TCP_V4 is
         (League.Strings.Empty_Universal_String);
    end Remote;
 
-   ------------------
-   -- Set_Listener --
-   ------------------
+   ------------------------
+   -- Set_Input_Listener --
+   ------------------------
 
-   overriding procedure Set_Listener
-     (Self     : in out Out_Socket;
-      Listener : Network.Streams.Event_Listener_Access)
-   is
-      use type Network.Streams.Event_Listener_Access;
+   overriding procedure Set_Input_Listener
+     (Self  : in out Out_Socket;
+      Value : Network.Streams.Input_Listener_Access) is
    begin
       pragma Assert (Self.Listener = null);
       pragma Assert (not Self.Promise.Is_Pending);
-      Self.Listener := Listener;
+      Self.Listener := Network.Connections.Listener_Access (Value);
 
       if Self.Error.Is_Empty then
          if Self.In_Event then
@@ -420,11 +421,23 @@ package body Network.Managers.TCP_V4 is
             Self.Change_Watch (not Write_Event);
          end if;
 
-         Listener.Can_Write;
+         Self.Listener.Can_Write;
       else
-         Listener.Closed (Self.Error);
+         Self.Listener.Closed (Self.Error);
       end if;
-   end Set_Listener;
+   end Set_Input_Listener;
+
+   -------------------------
+   -- Set_Output_Listener --
+   -------------------------
+
+   overriding procedure Set_Output_Listener
+     (Self  : in out Out_Socket;
+      Value : Network.Streams.Output_Listener_Access) is
+   begin
+      pragma Assert
+        (Self.Listener = Network.Connections.Listener_Access (Value));
+   end Set_Output_Listener;
 
    -----------
    -- Write --

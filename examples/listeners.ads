@@ -14,7 +14,7 @@ with Network.Streams;
 package Listeners is
 
    type Listener is limited new Network.Connection_Promises.Listener
-     and Network.Streams.Event_Listener
+     and Network.Connections.Listener
    with record
       Promise : Network.Connection_Promises.Promise;
       Remote  : Network.Connections.Connection_Access;
