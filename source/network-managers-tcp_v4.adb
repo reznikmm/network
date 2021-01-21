@@ -4,75 +4,17 @@
 -------------------------------------------------------------
 
 with Ada.Exceptions;
-with Ada.Streams;
 
 with GNAT.Sockets;
 with Interfaces.C;
 
 with Network.Streams;
 
+with Network.Managers.TCP_V4_Out;
+
 package body Network.Managers.TCP_V4 is
 
-   use type Network.Connections.Listener_Access;
-
-   type Out_Socket (Poll : Network.Polls.Poll_Access) is
-     limited new Network.Polls.Listener
-       and Network.Connections.Connection with
-   record
-      Promise    : aliased Connection_Promises.Controller;
-      Error      : League.Strings.Universal_String;
-      Internal   : GNAT.Sockets.Socket_Type;
-      Events     : Network.Polls.Event_Set := (others => False);
-      Is_Closed  : Boolean := False;  --  Has been closed already
-      In_Event   : Boolean := False;  --  Inside On_Event
-      Remote     : Network.Addresses.Address;
-      Listener   : Network.Connections.Listener_Access;
-   end record;
-
-   type Out_Socket_Access is access all Out_Socket;
-
-   overriding function Is_Closed (Self : Out_Socket) return Boolean;
-
-   overriding procedure Set_Input_Listener
-     (Self  : in out Out_Socket;
-      Value : Network.Streams.Input_Listener_Access);
-
-   overriding procedure Set_Output_Listener
-     (Self  : in out Out_Socket;
-      Value : Network.Streams.Output_Listener_Access);
-
-   overriding function Has_Listener (Self : Out_Socket) return Boolean;
-
-   overriding procedure On_Event
-     (Self   : in out Out_Socket;
-      Events : Network.Polls.Event_Set);
-
-   overriding procedure Read
-     (Self : in out Out_Socket;
-      Data : out Ada.Streams.Stream_Element_Array;
-      Last : out Ada.Streams.Stream_Element_Offset);
-
-   overriding procedure Write
-     (Self : in out Out_Socket;
-      Data : Ada.Streams.Stream_Element_Array;
-      Last : out Ada.Streams.Stream_Element_Offset);
-
-   overriding procedure Close (Self : in out Out_Socket);
-
-   overriding function Remote (Self : Out_Socket)
-     return Network.Addresses.Address;
-
-   procedure Change_Watch
-     (Self : in out Out_Socket'Class;
-      Set  : Network.Polls.Event_Set);
-
-   use type Network.Polls.Event_Set;
-
-   Write_Event : constant Network.Polls.Event_Set :=
-     (Network.Polls.Output => True, others => False);
-
-   Read_Event : constant Network.Polls.Event_Set :=
-     (Network.Polls.Input => True, others => False);
+   type Out_Socket_Access is access all TCP_V4_Out.Out_Socket;
 
    -----------------
    -- Can_Connect --
@@ -100,36 +42,6 @@ package body Network.Managers.TCP_V4 is
    overriding function Can_Listen
      (Self : Protocol; Address : Network.Addresses.Address) return Boolean
        renames Can_Connect;
-
-   ------------------
-   -- Change_Watch --
-   ------------------
-
-   procedure Change_Watch
-     (Self : in out Out_Socket'Class;
-      Set  : Network.Polls.Event_Set)
-   is
-   begin
-      Self.Poll.Change_Watch
-        (Set,
-         Interfaces.C.int (GNAT.Sockets.To_C (Self.Internal)),
-         Self'Unchecked_Access);
-
-      Self.Events := Set;
-   end Change_Watch;
-
-   -----------
-   -- Close --
-   -----------
-
-   overriding procedure Close (Self : in out Out_Socket) is
-   begin
-      if not Self.Is_Closed then
-         Self.Change_Watch ((others => False));
-         GNAT.Sockets.Close_Socket (Self.Internal);
-         Self.Is_Closed := True;
-      end if;
-   end Close;
 
    -------------
    -- Connect --
@@ -179,7 +91,7 @@ package body Network.Managers.TCP_V4 is
             end;
       end;
 
-      Socket := new Out_Socket (Poll'Unchecked_Access);
+      Socket := new TCP_V4_Out.Out_Socket (Poll'Unchecked_Access);
       Socket.Internal := Internal;
       Socket.Events := (Network.Polls.Output => True, others => False);
 
@@ -194,24 +106,6 @@ package body Network.Managers.TCP_V4 is
          Error := League.Strings.From_UTF_8_String
            (Ada.Exceptions.Exception_Message (E));
    end Connect;
-
-   ------------------
-   -- Has_Listener --
-   ------------------
-
-   overriding function Has_Listener (Self : Out_Socket) return Boolean is
-   begin
-      return Self.Listener /= null;
-   end Has_Listener;
-
-   ---------------
-   -- Is_Closed --
-   ---------------
-
-   overriding function Is_Closed (Self : Out_Socket) return Boolean is
-   begin
-      return Self.Is_Closed;
-   end Is_Closed;
 
    ------------
    -- Listen --
@@ -232,156 +126,6 @@ package body Network.Managers.TCP_V4 is
    end Listen;
 
    --------------
-   -- On_Event --
-   --------------
-
-   overriding procedure On_Event
-     (Self   : in out Out_Socket;
-      Events : Network.Polls.Event_Set)
-   is
-      function Get_Error return League.Strings.Universal_String;
-      procedure Disconnect (Error : League.Strings.Universal_String);
-
-      ----------------
-      -- Disconnect --
-      ----------------
-
-      procedure Disconnect (Error : League.Strings.Universal_String) is
-      begin
-         Self.Change_Watch ((others => False));
-         GNAT.Sockets.Close_Socket (Self.Internal);
-         Self.Is_Closed := True;
-
-         if Self.Listener /= null then
-            Self.Listener.Closed (Error);
-         end if;
-      end Disconnect;
-
-      ---------------
-      -- Get_Error --
-      ---------------
-
-      function Get_Error return League.Strings.Universal_String is
-         use type GNAT.Sockets.Error_Type;
-
-         Option : constant GNAT.Sockets.Option_Type :=
-           GNAT.Sockets.Get_Socket_Option
-             (Self.Internal,
-              GNAT.Sockets.Socket_Level,
-              GNAT.Sockets.Error);
-      begin
-         if Option.Error = GNAT.Sockets.Success then
-            return League.Strings.Empty_Universal_String;
-         else
-            return League.Strings.To_Universal_String
-              (GNAT.Sockets.Error_Type'Wide_Wide_Image (Option.Error));
-         end if;
-      end Get_Error;
-
-      Prev : constant Network.Polls.Event_Set := Self.Events;
-   begin
-      Self.In_Event := True;
-
-      if Self.Promise.Is_Pending then
-         Self.Error := Get_Error;
-
-         if not Self.Error.Is_Empty then
-            Disconnect (Self.Error);
-            Self.Promise.Reject (Self.Error);
-         else
-            Self.Events := (others => False);
-            Self.Promise.Resolve (Self'Unchecked_Access);
-
-            if Self.Events /= Prev then
-               Self.Change_Watch (Self.Events);
-            end if;
-         end if;
-      elsif Self.Is_Closed then
-         null;
-      else
-         pragma Assert (Self.Listener /= null);
-         Self.Events := Self.Events and not Events;
-
-         if Events (Network.Polls.Input)
-           and then not Self.Is_Closed
-         then
-            pragma Assert (Self.Error.Is_Empty);
-            Self.Listener.Can_Read;
-         end if;
-
-         if Events (Network.Polls.Output)
-           and then not Self.Is_Closed
-           and then Self.Error.Is_Empty
-         then
-            Self.Listener.Can_Write;
-         end if;
-
-         if Self.Is_Closed then
-            Disconnect (League.Strings.Empty_Universal_String);
-         elsif not Self.Error.Is_Empty then
-            Disconnect (Self.Error);
-         elsif Events (Network.Polls.Error) then
-            Disconnect (Get_Error);
-         elsif Events (Network.Polls.Close) then
-            Disconnect (League.Strings.Empty_Universal_String);
-         elsif Self.Events /= Prev then
-            Self.Change_Watch (Self.Events);
-         end if;
-      end if;
-
-      Self.In_Event := False;
-   end On_Event;
-
-   ----------
-   -- Read --
-   ----------
-
-   overriding procedure Read
-     (Self : in out Out_Socket;
-      Data : out Ada.Streams.Stream_Element_Array;
-      Last : out Ada.Streams.Stream_Element_Offset)
-   is
-      use type Ada.Streams.Stream_Element_Offset;
-      use type GNAT.Sockets.Error_Type;
-
-      Kind : GNAT.Sockets.Error_Type;
-   begin
-      GNAT.Sockets.Receive_Socket (Self.Internal, Data, Last);
-
-      if Last < Data'First then  --  End of stream
-         if Self.In_Event then
-            Self.Is_Closed := True;
-         else
-            Self.Change_Watch ((others => False));
-            GNAT.Sockets.Close_Socket (Self.Internal);
-            Self.Listener.Closed (League.Strings.Empty_Universal_String);
-         end if;
-      end if;
-
-   exception
-      when E : GNAT.Sockets.Socket_Error =>
-         Last := Data'First - 1;
-         Kind := GNAT.Sockets.Resolve_Exception (E);
-
-         if Kind /= GNAT.Sockets.Resource_Temporarily_Unavailable then
-            Self.Error := League.Strings.From_UTF_8_String
-              (Ada.Exceptions.Exception_Message (E));
-
-            if not Self.In_Event then
-               Self.Change_Watch ((others => False));
-               GNAT.Sockets.Close_Socket (Self.Internal);
-               Self.Listener.Closed (Self.Error);
-            end if;
-
-         elsif Self.In_Event then
-            Self.Events := Self.Events or Read_Event;
-
-         else
-            Self.Change_Watch (Self.Events or Read_Event);
-         end if;
-   end Read;
-
-   --------------
    -- Register --
    --------------
 
@@ -389,120 +133,5 @@ package body Network.Managers.TCP_V4 is
    begin
       Manager.Register (new Protocol);
    end Register;
-
-   ------------
-   -- Remote --
-   ------------
-
-   overriding function Remote (Self : Out_Socket)
-     return Network.Addresses.Address
-   is
-      Result : League.Strings.Universal_String;
-      Value  : GNAT.Sockets.Sock_Addr_Type;
-   begin
-      Value := GNAT.Sockets.Get_Peer_Name (Self.Internal);
-      Result.Append ("/ip4/");
-      Result.Append
-        (League.Strings.From_UTF_8_String (GNAT.Sockets.Image (Value.Addr)));
-      Result.Append ("/tcp/");
-
-      declare
-         Port : constant Wide_Wide_String := Value.Port'Wide_Wide_Image;
-      begin
-         Result.Append (Port (2 .. Port'Last));
-
-         return Network.Addresses.To_Address (Result);
-      end;
-
-   exception
-      when GNAT.Sockets.Socket_Error =>
-         return Network.Addresses.To_Address
-           (League.Strings.Empty_Universal_String);
-   end Remote;
-
-   ------------------------
-   -- Set_Input_Listener --
-   ------------------------
-
-   overriding procedure Set_Input_Listener
-     (Self  : in out Out_Socket;
-      Value : Network.Streams.Input_Listener_Access) is
-   begin
-      pragma Assert (not Self.Promise.Is_Pending);
-      Self.Listener := Network.Connections.Listener_Access (Value);
-
-      if Self.Error.Is_Empty then
-         if Self.In_Event then
-            Self.Events := not Write_Event;
-         else
-            Self.Change_Watch (not Write_Event);
-         end if;
-
-         Self.Listener.Can_Write;
-      else
-         Self.Listener.Closed (Self.Error);
-      end if;
-   end Set_Input_Listener;
-
-   -------------------------
-   -- Set_Output_Listener --
-   -------------------------
-
-   overriding procedure Set_Output_Listener
-     (Self  : in out Out_Socket;
-      Value : Network.Streams.Output_Listener_Access) is
-   begin
-      pragma Assert
-        (Self.Listener = Network.Connections.Listener_Access (Value));
-   end Set_Output_Listener;
-
-   -----------
-   -- Write --
-   -----------
-
-   overriding procedure Write
-     (Self : in out Out_Socket;
-      Data : Ada.Streams.Stream_Element_Array;
-      Last : out Ada.Streams.Stream_Element_Offset)
-   is
-      use type Ada.Streams.Stream_Element_Offset;
-      use type GNAT.Sockets.Error_Type;
-
-      Kind : GNAT.Sockets.Error_Type;
-   begin
-      GNAT.Sockets.Send_Socket (Self.Internal, Data, Last);
-
-      if Last < Data'First then  --  End of stream
-         if Self.In_Event then
-            Self.Is_Closed := True;
-         else
-            Self.Change_Watch ((others => False));
-            GNAT.Sockets.Close_Socket (Self.Internal);
-            Self.Listener.Closed (League.Strings.Empty_Universal_String);
-         end if;
-      end if;
-
-   exception
-      when E : GNAT.Sockets.Socket_Error =>
-         Last := Data'First - 1;
-         Kind := GNAT.Sockets.Resolve_Exception (E);
-
-         if Kind /= GNAT.Sockets.Resource_Temporarily_Unavailable then
-            Self.Error := League.Strings.From_UTF_8_String
-              (Ada.Exceptions.Exception_Message (E));
-
-            if not Self.In_Event then
-               Self.Change_Watch ((others => False));
-               GNAT.Sockets.Close_Socket (Self.Internal);
-               Self.Listener.Closed (Self.Error);
-            end if;
-
-         elsif Self.In_Event then
-            Self.Events := Self.Events or Write_Event;
-
-         else
-            Self.Change_Watch (Self.Events or Write_Event);
-         end if;
-   end Write;
 
 end Network.Managers.TCP_V4;

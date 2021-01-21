@@ -31,10 +31,7 @@ package body Listeners is
 
    overriding procedure On_Resolve
      (Self  : in out Listener;
-      Value : Network.Connections.Connection_Access)
-   is
-      List : League.String_Vectors.Universal_String_Vector;
-      CRLF : League.Strings.Universal_String;
+      Value : Network.Connections.Connection_Access) is
    begin
       Ada.Wide_Wide_Text_IO.Put ("Connected to ");
       Ada.Wide_Wide_Text_IO.Put_Line
@@ -42,23 +39,6 @@ package body Listeners is
 
       Self.Remote := Value;
       Value.Set_Listener (Self'Unchecked_Access);
-      CRLF.Append (League.Characters.Latin.Carriage_Return);
-      CRLF.Append (League.Characters.Latin.Line_Feed);
-      List.Append (+"GET / HTTP/1.1");
-      List.Append (+"Host: www.ada-ru.org");
-      List.Append (+"");
-      List.Append (+"");
-
-      declare
-         Last : Ada.Streams.Stream_Element_Count;
-         Data : constant Ada.Streams.Stream_Element_Array :=
-           League.Text_Codecs.Codec_For_Application_Locale.Encode
-             (List.Join (CRLF)).To_Stream_Element_Array;
-      begin
-         Self.Remote.Write (Data, Last);
-         Ada.Text_IO.Put_Line (Last'Image);
-         Ada.Streams.Stream_IO.Create (Self.Output, Name => "/tmp/aaa.bin");
-      end;
    end On_Resolve;
 
    ------------
@@ -80,9 +60,27 @@ package body Listeners is
    ---------------
 
    overriding procedure Can_Write (Self : in out Listener) is
-      pragma Unreferenced (Self);
+      List : League.String_Vectors.Universal_String_Vector;
+      CRLF : League.Strings.Universal_String;
    begin
       Ada.Text_IO.Put_Line ("Can_Write");
+      CRLF.Append (League.Characters.Latin.Carriage_Return);
+      CRLF.Append (League.Characters.Latin.Line_Feed);
+      List.Append (+"GET / HTTP/1.1");
+      List.Append (+"Host: www.ada-ru.org");
+      List.Append (+"");
+      List.Append (+"");
+
+      declare
+         Last : Ada.Streams.Stream_Element_Count;
+         Data : constant Ada.Streams.Stream_Element_Array :=
+           League.Text_Codecs.Codec_For_Application_Locale.Encode
+             (List.Join (CRLF)).To_Stream_Element_Array;
+      begin
+         Self.Remote.Write (Data, Last);
+         Ada.Text_IO.Put_Line (Last'Image);
+         Ada.Streams.Stream_IO.Create (Self.Output, Name => "/tmp/aaa.bin");
+      end;
    end Can_Write;
 
    --------------
