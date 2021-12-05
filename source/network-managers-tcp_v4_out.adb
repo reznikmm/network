@@ -118,12 +118,16 @@ package body Network.Managers.TCP_V4_Out is
          end if;
       end Get_Error;
 
-      Listener : Network.Connections.Listener_Access := Self.Listener;
-
-      Listener_Changed : Boolean := False;
-
       Prev : constant Network.Polls.Event_Set := Self.Events;
       --  Active poll events
+
+      Input    : constant Network.Polls.Event := Network.Polls.Input;
+      Output   : constant Network.Polls.Event := Network.Polls.Output;
+      Listener : array (Input .. Output) of Network.Connections.Listener_Access
+        := (others => Self.Listener);
+
+      Again : Boolean := True;
+
    begin
       Self.In_Event := True;
 
@@ -160,39 +164,44 @@ package body Network.Managers.TCP_V4_Out is
 
          Self.Events := Self.Events and not Events;
 
-         if Events (Network.Polls.Input) then  --  Have something to read
-            loop
-               Self.Listener.Can_Read;
-               --  This can change Self.Events, Self.Listener or close
-
-               exit when Self.Events (Network.Polls.Input)
-                 or else Self.Listener = Listener
-                 or else Self.Is_Closed;
-
-               Listener_Changed := True;
-
-               Listener := Self.Listener;
-            end loop;
+         --  Report read event to current listener
+         if Events (Input) then  --  Have something to read
+            Self.Listener.Can_Read;
+            --  This can change Self.Events, Self.Listener or close
          end if;
 
-         Listener_Changed := Listener_Changed or Self.Listener /= Listener;
-
-         if (Events (Network.Polls.Output)  --  New space to write
-             --  or new listener and not watching write
-             or else (Listener_Changed and not Prev (Polls.Output)))
-           and then not Self.Is_Closed
-           and then Self.Error.Is_Empty
-           and then Self.Listener.Assigned
+         --  Report write event to current listener
+         if Events (Output)
+           and not Self.Events (Output) --  Have space to write
+           and Self.Listener = Listener (Output)
+           and not Self.Is_Closed
          then
-            loop
-               Self.Listener.Can_Write;
-               --  This can change Self.Events, Self.Listener or close
-
-               exit when Self.Events (Network.Polls.Output)
-                 or else Self.Listener = Listener
-                 or else Self.Is_Closed;
-            end loop;
+            Self.Listener.Can_Write;
+            --  This can change Self.Events, Self.Listener or close
          end if;
+
+         --  Now report to changed listener if any
+         while Again loop
+            Again := False;
+
+            if not Self.Events (Input)  --  Can read
+              and Self.Listener /= Listener (Input)
+              and not Self.Is_Closed
+            then
+               Listener (Input) := Self.Listener;
+               Self.Listener.Can_Read;
+               Again := True;
+            end if;
+
+            if not Self.Events (Output)  --  Can write
+              and Self.Listener /= Listener (Output)
+              and not Self.Is_Closed
+            then
+               Listener (Output) := Self.Listener;
+               Self.Listener.Can_Write;
+               Again := True;
+            end if;
+         end loop;
 
          if Self.Is_Closed then
             Disconnect (League.Strings.Empty_Universal_String);

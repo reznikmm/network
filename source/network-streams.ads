@@ -34,6 +34,9 @@ package Network.Streams is
    --  listener. It's possible to read data after setting a listener to it
    --  until the stream is closed.
 
+   type Input_Stream_Access is access all Input_Stream'Class
+     with Storage_Size => 0;
+
    not overriding function Has_Listener
      (Self : Input_Stream) return Boolean is abstract;
    --  Return True if Set_Listener was called with not null value.
@@ -85,6 +88,9 @@ package Network.Streams is
    --  A stream of Stream_Elements (bytes). Initially the stream doesn't have a
    --  listener. It's possible to write data after setting a listener to it
    --  until the stream is closed.
+
+   type Output_Stream_Access is access all Output_Stream'Class
+     with Storage_Size => 0;
 
    not overriding function Has_Listener
      (Self : Output_Stream) return Boolean is abstract;
