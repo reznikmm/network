@@ -22,7 +22,7 @@ package body Echo_Listeners is
 
    overriding procedure Connected
      (Self       : in out Connection_Listener;
-      Connection : not null Network.Connections.Connection_Access;
+      Connection : in out Network.Connections.Connection;
       Remote     : Network.Addresses.Address)
    is
       Listener : constant Stream_Listener_Access := new Stream_Listener'

@@ -51,6 +51,21 @@ package body Network.Managers.TCP_V4_In is
       end if;
    end Close;
 
+   -----------------
+   -- Dereference --
+   -----------------
+
+   overriding function Dereference (Self : in out In_Socket) return Boolean is
+   begin
+      return Result : constant Boolean :=
+        System.Atomic_Counters.Decrement (Self.Counter)
+      do
+         if Result then
+            Self.Close;
+         end if;
+      end return;
+   end Dereference;
+
    ------------------
    -- Has_Listener --
    ------------------
@@ -240,6 +255,15 @@ package body Network.Managers.TCP_V4_In is
             Self.Change_Watch (Self.Events or Read_Event);
          end if;
    end Read;
+
+   ---------------
+   -- Reference --
+   ---------------
+
+   overriding procedure Reference (Self : in out In_Socket) is
+   begin
+      System.Atomic_Counters.Increment (Self.Counter);
+   end Reference;
 
    ------------
    -- Remote --

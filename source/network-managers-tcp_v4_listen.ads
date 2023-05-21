@@ -8,7 +8,7 @@ with GNAT.Sockets;
 private
 package Network.Managers.TCP_V4_Listen is
 
-   type Listen_Socket (Poll  : Network.Polls.Poll_Access) is
+   type Listen_Socket (Poll : Network.Polls.Poll_Access) is
      limited new Network.Polls.Listener with
    record
       Error      : League.Strings.Universal_String;

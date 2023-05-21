@@ -21,9 +21,16 @@ package body Listeners is
      return League.Strings.Universal_String
        renames League.Strings.To_Universal_String;
 
+   ---------------
+   -- On_Reject --
+   ---------------
+
    overriding procedure On_Reject
      (Self  : in out Listener;
-      Value : League.Strings.Universal_String) renames Closed;
+      Value : in out League.Strings.Universal_String) is
+   begin
+      Self.Closed (Value);
+   end On_Reject;
 
    ----------------
    -- On_Resolve --
@@ -31,7 +38,7 @@ package body Listeners is
 
    overriding procedure On_Resolve
      (Self  : in out Listener;
-      Value : Network.Connections.Connection_Access) is
+      Value : in out Network.Connections.Connection) is
    begin
       Ada.Wide_Wide_Text_IO.Put ("Connected to ");
       Ada.Wide_Wide_Text_IO.Put_Line

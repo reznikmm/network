@@ -7,6 +7,8 @@ with Interfaces.C;
 
 with Ada.Exceptions;
 
+with Network.Connections.Internal;
+
 package body Network.Managers.TCP_V4_Out is
 
    procedure Change_Watch
@@ -50,6 +52,21 @@ package body Network.Managers.TCP_V4_Out is
          Self.Is_Closed := True;
       end if;
    end Close;
+
+   -----------------
+   -- Dereference --
+   -----------------
+
+   overriding function Dereference (Self : in out Out_Socket) return Boolean is
+   begin
+      return Result : constant Boolean :=
+        System.Atomic_Counters.Decrement (Self.Counter)
+      do
+         if Result then
+            Self.Close;
+         end if;
+      end return;
+   end Dereference;
 
    ------------------
    -- Has_Listener --
@@ -136,7 +153,8 @@ package body Network.Managers.TCP_V4_Out is
 
          if Self.Error.Is_Empty then
             Self.Events := (others => False);  --  no events before listener
-            Self.Promise.Resolve (Self'Unchecked_Access);
+            Self.Promise.Resolve
+              (Network.Connections.Internal.Cast (Self'Unchecked_Access));
             --  Usually it changes Listener
 
             if Self.Listener.Assigned then
@@ -264,6 +282,15 @@ package body Network.Managers.TCP_V4_Out is
             Self.Change_Watch (Self.Events or Read_Event);
          end if;
    end Read;
+
+   ---------------
+   -- Reference --
+   ---------------
+
+   overriding procedure Reference (Self : in out Out_Socket) is
+   begin
+      System.Atomic_Counters.Increment (Self.Counter);
+   end Reference;
 
    ------------
    -- Remote --

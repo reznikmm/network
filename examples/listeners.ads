@@ -16,18 +16,18 @@ package Listeners is
      and Network.Connections.Listener
    with record
       Promise : Network.Connection_Promises.Promise;
-      Remote  : Network.Connections.Connection_Access;
+      Remote  : Network.Connections.Connection;
       Output  : Ada.Streams.Stream_IO.File_Type;
       Done    : Boolean := False;
    end record;
 
    overriding procedure On_Resolve
      (Self  : in out Listener;
-      Value : Network.Connections.Connection_Access);
+      Value : in out Network.Connections.Connection);
 
    overriding procedure On_Reject
      (Self  : in out Listener;
-      Value : League.Strings.Universal_String);
+      Value : in out League.Strings.Universal_String);
 
    overriding procedure Closed
      (Self  : in out Listener;

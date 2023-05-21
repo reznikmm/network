@@ -6,6 +6,7 @@
 with Ada.Exceptions;
 with Interfaces.C;
 
+with Network.Connections.Internal;
 with Network.Managers.TCP_V4_In;
 
 package body Network.Managers.TCP_V4_Listen is
@@ -48,17 +49,22 @@ package body Network.Managers.TCP_V4_Listen is
 
       GNAT.Sockets.Control_Socket (Socket.Internal, Req);
 
-      Self.Listener.Connected
-        (Connection => Connections.Connection_Access (Socket),
-         Remote     => Socket.Remote);
+      declare
+         Connection : Network.Connections.Connection :=
+           Network.Connections.Internal.Cast (Socket);
+      begin
+         Self.Listener.Connected
+           (Connection => Connection,
+            Remote     => Socket.Remote);
 
-      pragma Assert (Socket.Listener.Assigned);
-      Socket.Events := (others => True);
+         pragma Assert (Socket.Listener.Assigned);
+         Socket.Events := (others => True);
 
-      Self.Poll.Watch
-        (Interfaces.C.int (GNAT.Sockets.To_C (Socket.Internal)),
-         Events   => Socket.Events,
-         Listener => Socket.all'Access);
+         Self.Poll.Watch
+           (Interfaces.C.int (GNAT.Sockets.To_C (Socket.Internal)),
+            Events   => Socket.Events,
+            Listener => Socket.all'Access);
+      end;
    end On_Event;
 
 end Network.Managers.TCP_V4_Listen;

@@ -40,7 +40,7 @@ package Network.Managers is
 
    not overriding procedure Connected
      (Self       : in out Connection_Listener;
-      Connection : not null Network.Connections.Connection_Access;
+      Connection : in out Network.Connections.Connection;
       Remote     : Network.Addresses.Address) is abstract
      with Post'Class => Connection.Has_Listener;
    --  Once the manager accepts a new connection. It should assign a listener

@@ -21,12 +21,12 @@ package Network.Generic_Promises is
 
    not overriding procedure On_Resolve
      (Self  : in out Listener;
-      Value : Resolve_Element) is abstract;
+      Value : in out Resolve_Element) is abstract;
    --  The promise is resolved with a Value
 
    not overriding procedure On_Reject
      (Self  : in out Listener;
-      Value : Reject_Element) is abstract;
+      Value : in out Reject_Element) is abstract;
    --  The promise is rejected with a value
 
    type Promise is tagged private;

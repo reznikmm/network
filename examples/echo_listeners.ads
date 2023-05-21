@@ -13,12 +13,12 @@ package Echo_Listeners is
 
    overriding procedure Connected
      (Self       : in out Connection_Listener;
-      Connection : not null Network.Connections.Connection_Access;
+      Connection : in out Network.Connections.Connection;
       Remote     : Network.Addresses.Address);
 
    type Stream_Listener is limited new Network.Connections.Listener
    with record
-      Connection : not null Network.Connections.Connection_Access;
+      Connection : Network.Connections.Connection;
       Output     : Ada.Streams.Stream_IO.File_Type;
    end record;
 

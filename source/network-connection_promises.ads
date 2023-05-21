@@ -9,7 +9,7 @@ with Network.Connections;
 with Network.Generic_Promises;
 
 package Network.Connection_Promises is new Network.Generic_Promises
-  (Resolve_Element => Network.Connections.Connection_Access,
+  (Resolve_Element => Network.Connections.Connection,
    Reject_Element  => League.Strings.Universal_String);
 
 pragma Preelaborate (Network.Connection_Promises);

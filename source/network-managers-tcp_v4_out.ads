@@ -4,9 +4,10 @@
 -------------------------------------------------------------
 
 with Ada.Streams;
-
 with GNAT.Sockets;
+with System.Atomic_Counters;
 
+with Network.Abstract_Connections;
 with Network.Streams;
 
 private
@@ -14,8 +15,9 @@ package Network.Managers.TCP_V4_Out is
 
    type Out_Socket (Poll : Network.Polls.Poll_Access) is
      limited new Network.Polls.Listener
-       and Network.Connections.Connection with
+       and Network.Abstract_Connections.Abstract_Connection with
    record
+      Counter    : System.Atomic_Counters.Atomic_Counter;
       Promise    : aliased Connection_Promises.Controller;
       Error      : League.Strings.Universal_String;
       Internal   : GNAT.Sockets.Socket_Type;
@@ -30,6 +32,8 @@ package Network.Managers.TCP_V4_Out is
 
    type Out_Socket_Access is access all Out_Socket;
 
+   overriding procedure Reference (Self : in out Out_Socket);
+   overriding function Dereference (Self : in out Out_Socket) return Boolean;
    overriding function Is_Closed (Self : Out_Socket) return Boolean;
 
    overriding procedure Set_Input_Listener
