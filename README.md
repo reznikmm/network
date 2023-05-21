@@ -26,6 +26,10 @@ It depends on
 
 To use as a library, add `with "network";` to your project file.
 
+## Open questions
+
+* How to free connection objects?
+* Add Post'Class on Conntection_Promise.On_Resolve
 
 ## Maintainer
 

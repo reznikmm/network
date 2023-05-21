@@ -10,7 +10,7 @@ project Examples is
 
    for Source_Dirs use ("../examples");
    for Object_Dir use "../.objs/examples";
-   for Main use ("example.adb");
+   for Main use ("example.adb", "echo_server.adb");
 
    package Compiler is
       for Default_Switches ("ada") use

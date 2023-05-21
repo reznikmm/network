@@ -4,17 +4,24 @@
 -------------------------------------------------------------
 
 with Ada.Exceptions;
+with Ada.Unchecked_Deallocation;
 
 with GNAT.Sockets;
 with Interfaces.C;
-
-with Network.Streams;
 
 with Network.Managers.TCP_V4_Out;
 
 package body Network.Managers.TCP_V4 is
 
-   type Out_Socket_Access is access all TCP_V4_Out.Out_Socket;
+   subtype Out_Socket_Access is TCP_V4_Out.Out_Socket_Access;
+
+   procedure Free is new Ada.Unchecked_Deallocation
+     (TCP_V4_Listen.Listen_Socket, Listen_Socket_Access);
+
+   function Message (E : Ada.Exceptions.Exception_Occurrence)
+     return League.Strings.Universal_String is
+      (League.Strings.From_UTF_8_String
+        (Ada.Exceptions.Exception_Message (E)));
 
    -----------------
    -- Can_Connect --
@@ -84,8 +91,7 @@ package body Network.Managers.TCP_V4 is
                  GNAT.Sockets.Resolve_Exception (E);
             begin
                if Kind not in GNAT.Sockets.Operation_Now_In_Progress then
-                  Error := League.Strings.From_UTF_8_String
-                    (Ada.Exceptions.Exception_Message (E));
+                  Error := Message (E);
                   return;
                end if;
             end;
@@ -103,8 +109,7 @@ package body Network.Managers.TCP_V4 is
       Promise := Socket.Promise.To_Promise;
    exception
       when E : GNAT.Sockets.Socket_Error =>
-         Error := League.Strings.From_UTF_8_String
-           (Ada.Exceptions.Exception_Message (E));
+         Error := Message (E);
    end Connect;
 
    ------------
@@ -120,9 +125,53 @@ package body Network.Managers.TCP_V4 is
       Options  : League.String_Vectors.Universal_String_Vector :=
         League.String_Vectors.Empty_Universal_String_Vector)
    is
-      pragma Unreferenced (List, Poll, Error, Options);
+      pragma Unreferenced (Options);
+
+      Sockets : array (List'Range) of Listen_Socket_Access :=
+        (others => new TCP_V4_Listen.Listen_Socket (Poll'Unchecked_Access));
    begin
-      raise Program_Error;
+      for Index in List'Range loop
+         declare
+            Address : Network.Addresses.Address renames List (Index);
+            Socket  : Listen_Socket_Access renames Sockets (Index);
+            Part    : constant League.String_Vectors.Universal_String_Vector :=
+              Network.Addresses.To_String (Address).Split ('/');
+            Addr    : GNAT.Sockets.Sock_Addr_Type;
+         begin
+            Addr.Addr := GNAT.Sockets.Inet_Addr (Part (3).To_UTF_8_String);
+
+            Addr.Port := GNAT.Sockets.Port_Type'Wide_Wide_Value
+              (Part (5).To_Wide_Wide_String);
+
+            GNAT.Sockets.Create_Socket (Socket.Internal);
+            GNAT.Sockets.Bind_Socket (Socket.Internal, Addr);
+            GNAT.Sockets.Listen_Socket (Socket.Internal);
+            Socket.Listener := Listener;
+         exception
+            when E : GNAT.Sockets.Socket_Error =>
+               Error.Append (Network.Addresses.To_String (Address));
+               Error.Append (" => ");
+               Error.Append (Message (E));
+         end;
+      end loop;
+
+      if Error.Is_Empty then
+         for Socket of Sockets loop
+            Socket.Events := (Network.Polls.Input => True, others => False);
+
+            Poll.Watch
+              (Interfaces.C.int (GNAT.Sockets.To_C (Socket.Internal)),
+               Events   => Socket.Events,
+               Listener => Socket.all'Access);
+
+            Self.Listen.Append (Socket);
+         end loop;
+      else
+         for Socket of Sockets loop
+            GNAT.Sockets.Close_Socket (Socket.Internal);
+            Free (Socket);
+         end loop;
+      end if;
    end Listen;
 
    --------------

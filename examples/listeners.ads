@@ -9,7 +9,6 @@ with League.Strings;
 
 with Network.Connection_Promises;
 with Network.Connections;
-with Network.Streams;
 
 package Listeners is
 

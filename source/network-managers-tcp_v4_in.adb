@@ -1,4 +1,4 @@
---  SPDX-FileCopyrightText: 2021 Max Reznik <reznikmm@gmail.com>
+--  SPDX-FileCopyrightText: 2022 Max Reznik <reznikmm@gmail.com>
 --
 --  SPDX-License-Identifier: MIT
 -------------------------------------------------------------
@@ -7,10 +7,10 @@ with Interfaces.C;
 
 with Ada.Exceptions;
 
-package body Network.Managers.TCP_V4_Out is
+package body Network.Managers.TCP_V4_In is
 
    procedure Change_Watch
-     (Self : in out Out_Socket'Class;
+     (Self : in out In_Socket'Class;
       Set  : Network.Polls.Event_Set);
 
    use type Network.Polls.Event_Set;
@@ -26,7 +26,7 @@ package body Network.Managers.TCP_V4_Out is
    ------------------
 
    procedure Change_Watch
-     (Self : in out Out_Socket'Class;
+     (Self : in out In_Socket'Class;
       Set  : Network.Polls.Event_Set)
    is
    begin
@@ -42,7 +42,7 @@ package body Network.Managers.TCP_V4_Out is
    -- Close --
    -----------
 
-   overriding procedure Close (Self : in out Out_Socket) is
+   overriding procedure Close (Self : in out In_Socket) is
    begin
       if not Self.Is_Closed then
          Self.Change_Watch ((others => False));
@@ -55,7 +55,7 @@ package body Network.Managers.TCP_V4_Out is
    -- Has_Listener --
    ------------------
 
-   overriding function Has_Listener (Self : Out_Socket) return Boolean is
+   overriding function Has_Listener (Self : In_Socket) return Boolean is
    begin
       return Self.Listener.Assigned;
    end Has_Listener;
@@ -64,7 +64,7 @@ package body Network.Managers.TCP_V4_Out is
    -- Is_Closed --
    ---------------
 
-   overriding function Is_Closed (Self : Out_Socket) return Boolean is
+   overriding function Is_Closed (Self : In_Socket) return Boolean is
    begin
       return Self.Is_Closed;
    end Is_Closed;
@@ -74,7 +74,7 @@ package body Network.Managers.TCP_V4_Out is
    --------------
 
    overriding procedure On_Event
-     (Self   : in out Out_Socket;
+     (Self   : in out In_Socket;
       Events : Network.Polls.Event_Set)
    is
       use type Network.Connections.Listener_Access;
@@ -131,31 +131,7 @@ package body Network.Managers.TCP_V4_Out is
    begin
       Self.In_Event := True;
 
-      if Self.Promise.Is_Pending then
-         Self.Error := Get_Error;
-
-         if Self.Error.Is_Empty then
-            Self.Events := (others => False);  --  no events before listener
-            Self.Promise.Resolve (Self'Unchecked_Access);
-            --  Usually it changes Listener
-
-            if Self.Listener.Assigned then
-               if not Self.Events (Polls.Output) then
-                  Self.Events := not Write_Event;  --  We can write now
-                  Self.Listener.Can_Write;
-               else
-                  Self.Events := (others => True);
-               end if;
-            end if;
-
-            if Self.Events /= Prev then
-               Self.Change_Watch (Self.Events);
-            end if;
-         else
-            Disconnect (Self.Error);
-            Self.Promise.Reject (Self.Error);
-         end if;
-      elsif Self.Is_Closed then
+      if Self.Is_Closed then
          --  Connection has been closed, but some events arrive after that.
          null;
       else
@@ -224,7 +200,7 @@ package body Network.Managers.TCP_V4_Out is
    ----------
 
    overriding procedure Read
-     (Self : in out Out_Socket;
+     (Self : in out In_Socket;
       Data : out Ada.Streams.Stream_Element_Array;
       Last : out Ada.Streams.Stream_Element_Offset)
    is
@@ -269,49 +245,21 @@ package body Network.Managers.TCP_V4_Out is
    -- Remote --
    ------------
 
-   overriding function Remote (Self : Out_Socket)
-     return Network.Addresses.Address
-   is
-      Result : League.Strings.Universal_String;
-      Value  : GNAT.Sockets.Sock_Addr_Type;
-   begin
-      Value := GNAT.Sockets.Get_Peer_Name (Self.Internal);
-      Result.Append ("/ip4/");
-      Result.Append
-        (League.Strings.From_UTF_8_String (GNAT.Sockets.Image (Value.Addr)));
-      Result.Append ("/tcp/");
-
-      declare
-         Port : constant Wide_Wide_String := Value.Port'Wide_Wide_Image;
-      begin
-         Result.Append (Port (2 .. Port'Last));
-
-         return Network.Addresses.To_Address (Result);
-      end;
-
-   exception
-      when GNAT.Sockets.Socket_Error =>
-         return Network.Addresses.To_Address
-           (League.Strings.Empty_Universal_String);
-   end Remote;
+   overriding function Remote (Self : In_Socket)
+     return Network.Addresses.Address is (Self.Remote);
 
    ------------------------
    -- Set_Input_Listener --
    ------------------------
 
    overriding procedure Set_Input_Listener
-     (Self  : in out Out_Socket;
+     (Self  : in out In_Socket;
       Value : Network.Streams.Input_Listener_Access)
    is
    begin
-      pragma Assert (not Self.Promise.Is_Pending);
       Self.Listener := Network.Connections.Listener_Access (Value);
 
-      if Self.Error.Is_Empty then
-         if not Self.In_Event then
-            raise Program_Error with "Not implemented";
-         end if;
-      else
+      if not Self.Error.Is_Empty then
          Self.Listener.Closed (Self.Error);
       end if;
    end Set_Input_Listener;
@@ -321,7 +269,7 @@ package body Network.Managers.TCP_V4_Out is
    -------------------------
 
    overriding procedure Set_Output_Listener
-     (Self  : in out Out_Socket;
+     (Self  : in out In_Socket;
       Value : Network.Streams.Output_Listener_Access)
    is
       use type Network.Connections.Listener_Access;
@@ -335,7 +283,7 @@ package body Network.Managers.TCP_V4_Out is
    -----------
 
    overriding procedure Write
-     (Self : in out Out_Socket;
+     (Self : in out In_Socket;
       Data : Ada.Streams.Stream_Element_Array;
       Last : out Ada.Streams.Stream_Element_Offset)
    is
@@ -376,4 +324,4 @@ package body Network.Managers.TCP_V4_Out is
          end if;
    end Write;
 
-end Network.Managers.TCP_V4_Out;
+end Network.Managers.TCP_V4_In;

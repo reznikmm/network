@@ -3,14 +3,22 @@
 --  SPDX-License-Identifier: MIT
 -------------------------------------------------------------
 
+private with Ada.Containers.Vectors;
+private with Network.Managers.TCP_V4_Listen;
+
 package Network.Managers.TCP_V4 is
 
    procedure Register (Manager : in out Network.Managers.Manager);
 
 private
 
+   type Listen_Socket_Access is access all TCP_V4_Listen.Listen_Socket;
+
+   package Listen_Socket_Vectors is new Ada.Containers.Vectors
+     (Positive, Listen_Socket_Access);
+
    type Protocol is new Network.Managers.Protocol with record
-      null;
+      Listen : Listen_Socket_Vectors.Vector;
    end record;
 
    overriding function Can_Listen
