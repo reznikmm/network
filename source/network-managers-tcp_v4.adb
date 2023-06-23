@@ -1,4 +1,4 @@
---  SPDX-FileCopyrightText: 2021 Max Reznik <reznikmm@gmail.com>
+--  SPDX-FileCopyrightText: 2021-2023 Max Reznik <reznikmm@gmail.com>
 --
 --  SPDX-License-Identifier: MIT
 -------------------------------------------------------------
@@ -6,7 +6,6 @@
 with Ada.Exceptions;
 with Ada.Unchecked_Deallocation;
 
-with GNAT.Sockets;
 with Interfaces.C;
 
 with Network.Managers.TCP_V4_Out;
@@ -55,15 +54,14 @@ package body Network.Managers.TCP_V4 is
    -------------
 
    overriding procedure Connect
-     (Self    : in out Protocol;
-      Address : Network.Addresses.Address;
-      Poll    : in out Network.Polls.Poll;
-      Error   : out League.Strings.Universal_String;
-      Promise : out Network.Connection_Promises.Promise;
-      Options : League.String_Vectors.Universal_String_Vector :=
+     (Self     : in out Protocol;
+      Address  : Network.Addresses.Address;
+      Error    : out League.Strings.Universal_String;
+      Listener : not null Connection_Listener_Access;
+      Options  : League.String_Vectors.Universal_String_Vector :=
         League.String_Vectors.Empty_Universal_String_Vector)
    is
-      pragma Unreferenced (Options, Self);
+      pragma Unreferenced (Options);
 
       Req  : GNAT.Sockets.Request_Type :=
         (GNAT.Sockets.Non_Blocking_IO, Enabled => True);
@@ -74,6 +72,7 @@ package body Network.Managers.TCP_V4 is
       Internal : GNAT.Sockets.Socket_Type;
       Addr     : GNAT.Sockets.Sock_Addr_Type;
       Socket   : Out_Socket_Access;
+      Ignore   : Boolean;
    begin
       Addr.Addr := GNAT.Sockets.Inet_Addr (List (3).To_UTF_8_String);
       Addr.Port := GNAT.Sockets.Port_Type'Wide_Wide_Value
@@ -97,16 +96,18 @@ package body Network.Managers.TCP_V4 is
             end;
       end;
 
-      Socket := new TCP_V4_Out.Out_Socket (Poll'Unchecked_Access);
+      Socket := new TCP_V4_Out.Out_Socket (Self.Manager);
       Socket.Internal := Internal;
       Socket.Events := (Network.Polls.Output => True, others => False);
+      Socket.Callback := Listener;
+      Self.Manager.New_Connection (Socket);
+      Ignore := Socket.Dereference;
 
-      Poll.Watch
+      Self.Manager.Poll.Watch
         (Interfaces.C.int (GNAT.Sockets.To_C (Internal)),
          Events   => Socket.Events,
          Listener => Socket.all'Access);
 
-      Promise := Socket.Promise.To_Promise;
    exception
       when E : GNAT.Sockets.Socket_Error =>
          Error := Message (E);
@@ -119,8 +120,7 @@ package body Network.Managers.TCP_V4 is
    overriding procedure Listen
      (Self     : in out Protocol;
       List     : Network.Addresses.Address_Array;
-      Listener : Connection_Listener_Access;
-      Poll     : in out Network.Polls.Poll;
+      Listener : not null Connection_Listener_Access;
       Error    : out League.Strings.Universal_String;
       Options  : League.String_Vectors.Universal_String_Vector :=
         League.String_Vectors.Empty_Universal_String_Vector)
@@ -128,7 +128,7 @@ package body Network.Managers.TCP_V4 is
       pragma Unreferenced (Options);
 
       Sockets : array (List'Range) of Listen_Socket_Access :=
-        (others => new TCP_V4_Listen.Listen_Socket (Poll'Unchecked_Access));
+        (others => new TCP_V4_Listen.Listen_Socket (Self.Manager));
    begin
       for Index in List'Range loop
          declare
@@ -159,7 +159,7 @@ package body Network.Managers.TCP_V4 is
          for Socket of Sockets loop
             Socket.Events := (Network.Polls.Input => True, others => False);
 
-            Poll.Watch
+            Self.Manager.Poll.Watch
               (Interfaces.C.int (GNAT.Sockets.To_C (Socket.Internal)),
                Events   => Socket.Events,
                Listener => Socket.all'Access);
@@ -180,7 +180,35 @@ package body Network.Managers.TCP_V4 is
 
    procedure Register (Manager : in out Network.Managers.Manager) is
    begin
-      Manager.Register (new Protocol);
+      Manager.Register (new Protocol (Manager'Unchecked_Access));
    end Register;
+
+   ------------
+   -- Remote --
+   ------------
+
+   function Remote (Value : GNAT.Sockets.Sock_Addr_Type)
+     return Network.Addresses.Address
+   is
+      Result : League.Strings.Universal_String;
+   begin
+      Result.Append ("/ip4/");
+      Result.Append
+        (League.Strings.From_UTF_8_String (GNAT.Sockets.Image (Value.Addr)));
+      Result.Append ("/tcp/");
+
+      declare
+         Port : constant Wide_Wide_String := Value.Port'Wide_Wide_Image;
+      begin
+         Result.Append (Port (2 .. Port'Last));
+
+         return Network.Addresses.To_Address (Result);
+      end;
+
+   exception
+      when GNAT.Sockets.Socket_Error =>
+         return Network.Addresses.To_Address
+           (League.Strings.Empty_Universal_String);
+   end Remote;
 
 end Network.Managers.TCP_V4;

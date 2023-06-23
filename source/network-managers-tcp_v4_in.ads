@@ -1,4 +1,4 @@
---  SPDX-FileCopyrightText: 2022 Max Reznik <reznikmm@gmail.com>
+--  SPDX-FileCopyrightText: 2022-2023 Max Reznik <reznikmm@gmail.com>
 --
 --  SPDX-License-Identifier: MIT
 -------------------------------------------------------------
@@ -13,7 +13,7 @@ with Network.Streams;
 private
 package Network.Managers.TCP_V4_In is
 
-   type In_Socket (Poll : Network.Polls.Poll_Access) is
+   type In_Socket (Manager : not null Manager_Access) is
      limited new Network.Polls.Listener
        and Network.Abstract_Connections.Abstract_Connection with
    record

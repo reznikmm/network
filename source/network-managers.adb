@@ -1,7 +1,9 @@
---  SPDX-FileCopyrightText: 2021 Max Reznik <reznikmm@gmail.com>
+--  SPDX-FileCopyrightText: 2021-2023 Max Reznik <reznikmm@gmail.com>
 --
 --  SPDX-License-Identifier: MIT
 -------------------------------------------------------------
+
+with Network.Connections.Internal;
 
 package body Network.Managers is
 
@@ -10,17 +12,17 @@ package body Network.Managers is
    -------------
 
    procedure Connect
-     (Self    : in out Manager'Class;
-      Address : Network.Addresses.Address;
-      Error   : out League.Strings.Universal_String;
-      Promise : out Connection_Promises.Promise;
-      Options : League.String_Vectors.Universal_String_Vector :=
+     (Self     : in out Manager'Class;
+      Address  : Network.Addresses.Address;
+      Error    : out League.Strings.Universal_String;
+      Listener : not null Connection_Listener_Access;
+      Options  : League.String_Vectors.Universal_String_Vector :=
         League.String_Vectors.Empty_Universal_String_Vector)
    is
    begin
       for Proto of Self.Proto (1 .. Self.Last) loop
          if Proto.Can_Connect (Address) then
-            Proto.Connect (Address, Self.Poll, Error, Promise, Options);
+            Proto.Connect (Address, Error, Listener, Options);
 
             return;
          end if;
@@ -28,6 +30,18 @@ package body Network.Managers is
 
       Error.Append ("Unknown protocol");
    end Connect;
+
+   -----------------------
+   -- Delete_Connection --
+   -----------------------
+
+   procedure Delete_Connection
+     (Self       : in out Manager;
+      Connection : not null access
+        Network.Abstract_Connections.Abstract_Connection'Class) is
+   begin
+      Self.Deleted.Append (Connection);
+   end Delete_Connection;
 
    ----------------
    -- Initialize --
@@ -45,7 +59,7 @@ package body Network.Managers is
    procedure Listen
      (Self     : in out Manager'Class;
       List     : Network.Addresses.Address_Array;
-      Listener : Connection_Listener_Access;
+      Listener : not null Connection_Listener_Access;
       Error    : out League.Strings.Universal_String;
       Options  : League.String_Vectors.Universal_String_Vector :=
         League.String_Vectors.Empty_Universal_String_Vector)
@@ -70,7 +84,6 @@ package body Network.Managers is
                Proto.Listen
                  (Slice (Slice'First .. Last),
                   Listener,
-                  Self.Poll,
                   Ok,
                   Options);
 
@@ -87,6 +100,18 @@ package body Network.Managers is
          end loop;
       end if;
    end Listen;
+
+   --------------------
+   -- New_Connection --
+   --------------------
+
+   procedure New_Connection
+     (Self       : in out Manager;
+      Connection : not null access
+        Network.Abstract_Connections.Abstract_Connection'Class) is
+   begin
+      Connection.Reference;
+   end New_Connection;
 
    --------------
    -- Register --
@@ -109,6 +134,21 @@ package body Network.Managers is
       Timeout : Duration) is
    begin
       Self.Poll.Wait (Timeout);
+
+      --  Clean up closed connections
+      for J of Self.Deleted loop
+         declare
+            Connection : Network.Connections.Connection :=
+              Network.Connections.Internal.Cast (J);
+            pragma Unreferenced (Connection);
+            Ignore : Boolean;
+         begin
+            Ignore := J.Dereference;
+            --  Now Connection will be destroyed if there are no references
+         end;
+      end loop;
+
+      Self.Deleted.Clear;
    end Wait;
 
 end Network.Managers;

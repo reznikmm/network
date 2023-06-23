@@ -6,6 +6,7 @@
 with Network.Abstract_Connections;
 
 package Network.Connections.Internal is
+   pragma Preelaborate;
 
    function Cast
      (Self : access Network.Abstract_Connections.Abstract_Connection'Class)

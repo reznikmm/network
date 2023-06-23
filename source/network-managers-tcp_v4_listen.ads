@@ -1,4 +1,4 @@
---  SPDX-FileCopyrightText: 2022 Max Reznik <reznikmm@gmail.com>
+--  SPDX-FileCopyrightText: 2022-2023 Max Reznik <reznikmm@gmail.com>
 --
 --  SPDX-License-Identifier: MIT
 -------------------------------------------------------------
@@ -8,7 +8,7 @@ with GNAT.Sockets;
 private
 package Network.Managers.TCP_V4_Listen is
 
-   type Listen_Socket (Poll : Network.Polls.Poll_Access) is
+   type Listen_Socket (Manager : not null Manager_Access) is
      limited new Network.Polls.Listener with
    record
       Error      : League.Strings.Universal_String;

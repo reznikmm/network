@@ -1,13 +1,13 @@
---  SPDX-FileCopyrightText: 2021 Max Reznik <reznikmm@gmail.com>
+--  SPDX-FileCopyrightText: 2021-2023 Max Reznik <reznikmm@gmail.com>
 --
 --  SPDX-License-Identifier: MIT
 -------------------------------------------------------------
-
 with Interfaces.C;
 
 with Ada.Exceptions;
 
 with Network.Connections.Internal;
+with Network.Managers.TCP_V4;
 
 package body Network.Managers.TCP_V4_Out is
 
@@ -32,7 +32,7 @@ package body Network.Managers.TCP_V4_Out is
       Set  : Network.Polls.Event_Set)
    is
    begin
-      Self.Poll.Change_Watch
+      Self.Manager.Poll.Change_Watch
         (Set,
          Interfaces.C.int (GNAT.Sockets.To_C (Self.Internal)),
          Self'Unchecked_Access);
@@ -46,11 +46,11 @@ package body Network.Managers.TCP_V4_Out is
 
    overriding procedure Close (Self : in out Out_Socket) is
    begin
-      if not Self.Is_Closed then
-         Self.Change_Watch ((others => False));
-         GNAT.Sockets.Close_Socket (Self.Internal);
-         Self.Is_Closed := True;
-      end if;
+      pragma Assert (not Self.Is_Closed);  --  Precondition
+      Self.Change_Watch ((others => False));
+      GNAT.Sockets.Close_Socket (Self.Internal);
+      Self.Manager.Delete_Connection (Self'Unchecked_Access);
+      Self.Is_Closed := True;
    end Close;
 
    -----------------
@@ -62,7 +62,7 @@ package body Network.Managers.TCP_V4_Out is
       return Result : constant Boolean :=
         System.Atomic_Counters.Decrement (Self.Counter)
       do
-         if Result then
+         if Result and then not Self.Is_Closed then
             Self.Close;
          end if;
       end return;
@@ -108,6 +108,7 @@ package body Network.Managers.TCP_V4_Out is
          Self.Change_Watch ((others => False));
          GNAT.Sockets.Close_Socket (Self.Internal);
          Self.Is_Closed := True;
+         Self.Manager.Delete_Connection (Self'Unchecked_Access);
 
          if Self.Listener.Assigned then
             Self.Listener.Closed (Error);
@@ -138,6 +139,9 @@ package body Network.Managers.TCP_V4_Out is
       Prev : constant Network.Polls.Event_Set := Self.Events;
       --  Active poll events
 
+      Callback : constant Network.Managers.Connection_Listener_Access :=
+        Self.Callback;
+
       Input    : constant Network.Polls.Event := Network.Polls.Input;
       Output   : constant Network.Polls.Event := Network.Polls.Output;
       Listener : array (Input .. Output) of Network.Connections.Listener_Access
@@ -148,22 +152,26 @@ package body Network.Managers.TCP_V4_Out is
    begin
       Self.In_Event := True;
 
-      if Self.Promise.Is_Pending then
+      if Callback /= null then
+         Self.Callback := null;
          Self.Error := Get_Error;
 
          if Self.Error.Is_Empty then
             Self.Events := (others => False);  --  no events before listener
-            Self.Promise.Resolve
-              (Network.Connections.Internal.Cast (Self'Unchecked_Access));
-            --  Usually it changes Listener
 
-            if Self.Listener.Assigned then
-               if not Self.Events (Polls.Output) then
-                  Self.Events := not Write_Event;  --  We can write now
-                  Self.Listener.Can_Write;
-               else
-                  Self.Events := (others => True);
-               end if;
+            declare
+               Object : Network.Connections.Connection :=
+                 Network.Connections.Internal.Cast (Self'Unchecked_Access);
+            begin
+               Callback.Connected (Object, Self.Remote);
+               --  Must change the listener
+            end;
+
+            if not Self.Events (Polls.Output) then
+               Self.Events := not Write_Event;  --  We can write now
+               Self.Listener.Can_Write;
+            else
+               Self.Events := (others => True);
             end if;
 
             if Self.Events /= Prev then
@@ -171,7 +179,7 @@ package body Network.Managers.TCP_V4_Out is
             end if;
          else
             Disconnect (Self.Error);
-            Self.Promise.Reject (Self.Error);
+            Callback.Rejected (Self.Error, Self.Remote);
          end if;
       elsif Self.Is_Closed then
          --  Connection has been closed, but some events arrive after that.
@@ -297,30 +305,8 @@ package body Network.Managers.TCP_V4_Out is
    ------------
 
    overriding function Remote (Self : Out_Socket)
-     return Network.Addresses.Address
-   is
-      Result : League.Strings.Universal_String;
-      Value  : GNAT.Sockets.Sock_Addr_Type;
-   begin
-      Value := GNAT.Sockets.Get_Peer_Name (Self.Internal);
-      Result.Append ("/ip4/");
-      Result.Append
-        (League.Strings.From_UTF_8_String (GNAT.Sockets.Image (Value.Addr)));
-      Result.Append ("/tcp/");
-
-      declare
-         Port : constant Wide_Wide_String := Value.Port'Wide_Wide_Image;
-      begin
-         Result.Append (Port (2 .. Port'Last));
-
-         return Network.Addresses.To_Address (Result);
-      end;
-
-   exception
-      when GNAT.Sockets.Socket_Error =>
-         return Network.Addresses.To_Address
-           (League.Strings.Empty_Universal_String);
-   end Remote;
+     return Network.Addresses.Address is
+       (TCP_V4.Remote (GNAT.Sockets.Get_Peer_Name (Self.Internal)));
 
    ------------------------
    -- Set_Input_Listener --
@@ -331,7 +317,7 @@ package body Network.Managers.TCP_V4_Out is
       Value : Network.Streams.Input_Listener_Access)
    is
    begin
-      pragma Assert (not Self.Promise.Is_Pending);
+      pragma Assert (Self.Callback = null);
       Self.Listener := Network.Connections.Listener_Access (Value);
 
       if Self.Error.Is_Empty then

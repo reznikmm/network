@@ -1,4 +1,4 @@
---  SPDX-FileCopyrightText: 2021 Max Reznik <reznikmm@gmail.com>
+--  SPDX-FileCopyrightText: 2021-2023 Max Reznik <reznikmm@gmail.com>
 --
 --  SPDX-License-Identifier: MIT
 -------------------------------------------------------------
@@ -13,12 +13,12 @@ with Network.Streams;
 private
 package Network.Managers.TCP_V4_Out is
 
-   type Out_Socket (Poll : Network.Polls.Poll_Access) is
+   type Out_Socket (Manager : not null Manager_Access) is
      limited new Network.Polls.Listener
        and Network.Abstract_Connections.Abstract_Connection with
    record
       Counter    : System.Atomic_Counters.Atomic_Counter;
-      Promise    : aliased Connection_Promises.Controller;
+      Callback   : Network.Managers.Connection_Listener_Access;
       Error      : League.Strings.Universal_String;
       Internal   : GNAT.Sockets.Socket_Type;
       Events     : Network.Polls.Event_Set := (others => False);
@@ -26,7 +26,6 @@ package Network.Managers.TCP_V4_Out is
       --  watching events.
       Is_Closed  : Boolean := False;  --  Has been closed already
       In_Event   : Boolean := False;  --  Inside On_Event
-      Remote     : Network.Addresses.Address;
       Listener   : Network.Connections.Listener_Access;
    end record;
 

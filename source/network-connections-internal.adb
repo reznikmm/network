@@ -14,6 +14,7 @@ package body Network.Connections.Internal is
       return Connection
    is
    begin
+      Self.Reference;
       return (Ada.Finalization.Controlled with Object => Self);
    end Cast;
 

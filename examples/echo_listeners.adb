@@ -14,6 +14,7 @@ package body Echo_Listeners is
    begin
       Ada.Wide_Wide_Text_IO.Put ("Closed: ");
       Ada.Wide_Wide_Text_IO.Put_Line (Error.To_Wide_Wide_String);
+      Self.Connection := Network.Connections.Null_Connection;
    end Closed;
 
    ---------------

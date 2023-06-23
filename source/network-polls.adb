@@ -1,4 +1,4 @@
---  SPDX-FileCopyrightText: 2021 Max Reznik <reznikmm@gmail.com>
+--  SPDX-FileCopyrightText: 2021-2023 Max Reznik <reznikmm@gmail.com>
 --
 --  SPDX-License-Identifier: MIT
 -------------------------------------------------------------
@@ -183,11 +183,11 @@ package body Network.Polls is
             maxevents => Data'Length,
             timeout   => Interfaces.C.int (1000 * Timeout));
       begin
-         pragma Assert (Result >= 0);
-
-         for X of Data (1 .. Natural (Result)) loop
-            X.data.On_Event (To_Set (X.events));
-         end loop;
+         if Result > 0 then
+            for X of Data (1 .. Positive (Result)) loop
+               X.data.On_Event (To_Set (X.events));
+            end loop;
+         end if;
       end;
    end Wait;
 

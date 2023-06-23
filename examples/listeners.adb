@@ -13,40 +13,41 @@ with League.Characters.Latin;
 with League.Text_Codecs;
 with League.Stream_Element_Vectors;
 
-with Network.Addresses;
-
 package body Listeners is
 
    function "+" (Text : Wide_Wide_String)
      return League.Strings.Universal_String
        renames League.Strings.To_Universal_String;
 
-   ---------------
-   -- On_Reject --
-   ---------------
+   --------------
+   -- Rejected --
+   --------------
 
-   overriding procedure On_Reject
-     (Self  : in out Listener;
-      Value : in out League.Strings.Universal_String) is
+   overriding procedure Rejected
+     (Self   : in out Listener;
+      Error  : League.Strings.Universal_String;
+      Remote : Network.Addresses.Address) is
    begin
-      Self.Closed (Value);
-   end On_Reject;
+      Ada.Text_IO.Put_Line ("Rejected: " & Error.To_UTF_8_String);
+      Self.Done := True;
+   end Rejected;
 
-   ----------------
-   -- On_Resolve --
-   ----------------
+   ---------------
+   -- Connected --
+   ---------------
 
-   overriding procedure On_Resolve
-     (Self  : in out Listener;
-      Value : in out Network.Connections.Connection) is
+   overriding procedure Connected
+     (Self       : in out Listener;
+      Connection : in out Network.Connections.Connection;
+      Remote     : Network.Addresses.Address) is
    begin
       Ada.Wide_Wide_Text_IO.Put ("Connected to ");
       Ada.Wide_Wide_Text_IO.Put_Line
-        (Network.Addresses.To_String (Value.Remote).To_Wide_Wide_String);
+        (Network.Addresses.To_String (Remote).To_Wide_Wide_String);
 
-      Self.Remote := Value;
-      Value.Set_Listener (Self'Unchecked_Access);
-   end On_Resolve;
+      Self.Remote := Connection;
+      Connection.Set_Listener (Self'Unchecked_Access);
+   end Connected;
 
    ------------
    -- Closed --
@@ -56,10 +57,10 @@ package body Listeners is
      (Self  : in out Listener;
       Error : League.Strings.Universal_String)
    is
-      pragma Unreferenced (Self);
    begin
       Ada.Text_IO.Put_Line ("Closed: " & Error.To_UTF_8_String);
       Self.Done := True;
+      Self.Remote := Network.Connections.Null_Connection;
    end Closed;
 
    ---------------
@@ -75,6 +76,7 @@ package body Listeners is
       CRLF.Append (League.Characters.Latin.Line_Feed);
       List.Append (+"GET / HTTP/1.1");
       List.Append (+"Host: www.ada-ru.org");
+      List.Append (+"Connection: close");
       List.Append (+"");
       List.Append (+"");
 

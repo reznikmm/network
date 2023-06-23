@@ -1,9 +1,10 @@
---  SPDX-FileCopyrightText: 2021 Max Reznik <reznikmm@gmail.com>
+--  SPDX-FileCopyrightText: 2021-2023 Max Reznik <reznikmm@gmail.com>
 --
 --  SPDX-License-Identifier: MIT
 -------------------------------------------------------------
 
 with Ada.Unchecked_Deallocation;
+with System.Storage_Elements;
 
 package body Network.Connections is
 
@@ -24,7 +25,7 @@ package body Network.Connections is
 
    overriding procedure Close (Self : in out Connection) is
    begin
-      if Self.Object /= null then
+      if Self.Object /= null and then not Self.Object.Is_Closed then
          Self.Object.Close;
       end if;
    end Close;
@@ -43,7 +44,23 @@ package body Network.Connections is
       if Self.Object /= null and then Self.Object.Dereference then
          Free (Self.Object);
       end if;
+
+      Self.Object := null;
    end Finalize;
+
+   ----------
+   -- Hash --
+   ----------
+
+   function Hash (Self : Connection) return Ada.Containers.Hash_Type is
+   begin
+      if Self.Object = null then
+         return 0;
+      else
+         return Ada.Containers.Hash_Type'Mod
+           (System.Storage_Elements.To_Integer (Self.Object.all'Address));
+      end if;
+   end Hash;
 
    ----------
    -- Read --

@@ -1,4 +1,4 @@
---  SPDX-FileCopyrightText: 2022 Max Reznik <reznikmm@gmail.com>
+--  SPDX-FileCopyrightText: 2022-2023 Max Reznik <reznikmm@gmail.com>
 --
 --  SPDX-License-Identifier: MIT
 -------------------------------------------------------------
@@ -30,7 +30,7 @@ package body Network.Managers.TCP_V4_In is
       Set  : Network.Polls.Event_Set)
    is
    begin
-      Self.Poll.Change_Watch
+      Self.Manager.Poll.Change_Watch
         (Set,
          Interfaces.C.int (GNAT.Sockets.To_C (Self.Internal)),
          Self'Unchecked_Access);
@@ -44,11 +44,11 @@ package body Network.Managers.TCP_V4_In is
 
    overriding procedure Close (Self : in out In_Socket) is
    begin
-      if not Self.Is_Closed then
-         Self.Change_Watch ((others => False));
-         GNAT.Sockets.Close_Socket (Self.Internal);
-         Self.Is_Closed := True;
-      end if;
+      pragma Assert (not Self.Is_Closed);  --  Precondition
+      Self.Change_Watch ((others => False));
+      GNAT.Sockets.Close_Socket (Self.Internal);
+      Self.Manager.Delete_Connection (Self'Unchecked_Access);
+      Self.Is_Closed := True;
    end Close;
 
    -----------------
@@ -60,7 +60,7 @@ package body Network.Managers.TCP_V4_In is
       return Result : constant Boolean :=
         System.Atomic_Counters.Decrement (Self.Counter)
       do
-         if Result then
+         if Result and then not Self.Is_Closed then
             Self.Close;
          end if;
       end return;
@@ -105,6 +105,7 @@ package body Network.Managers.TCP_V4_In is
       begin
          Self.Change_Watch ((others => False));
          GNAT.Sockets.Close_Socket (Self.Internal);
+         Self.Manager.Delete_Connection (Self'Unchecked_Access);
          Self.Is_Closed := True;
 
          if Self.Listener.Assigned then

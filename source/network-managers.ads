@@ -1,14 +1,16 @@
---  SPDX-FileCopyrightText: 2021 Max Reznik <reznikmm@gmail.com>
+--  SPDX-FileCopyrightText: 2021-2023 Max Reznik <reznikmm@gmail.com>
 --
 --  SPDX-License-Identifier: MIT
 -------------------------------------------------------------
 
+with Ada.Containers.Vectors;
+
 with League.String_Vectors;
 with League.Strings;
 
+with Network.Abstract_Connections;
 with Network.Addresses;
 with Network.Connections;
-with Network.Connection_Promises;
 with Network.Polls;
 
 package Network.Managers is
@@ -17,24 +19,10 @@ package Network.Managers is
    type Manager is tagged limited private;
    --  Network connection manager
 
-   procedure Initialize (Self : in out Manager'Class);
-   --  Call Initialize before use
-
-   procedure Connect
-     (Self    : in out Manager'Class;
-      Address : Network.Addresses.Address;
-      Error   : out League.Strings.Universal_String;
-      Promise : out Connection_Promises.Promise;
-      Options : League.String_Vectors.Universal_String_Vector :=
-        League.String_Vectors.Empty_Universal_String_Vector);
-   --  Try to connect to given address asynchronously. Return a connection
-   --  promise or an Error if the address isn't supported. The promise will
-   --  be resolved with a connection or rejected with an error. On successful
-   --  connect the application should set a listener to the connection. After
-   --  that it could write and read data until get a close event. Options are
-   --  protocol dependent.
-
    type Connection_Listener is limited interface;
+   --  The interface for receiving connection establishment/acceptance
+   --  notifications.
+
    type Connection_Listener_Access is access all Connection_Listener'Class
      with Storage_Size => 0;
 
@@ -43,13 +31,34 @@ package Network.Managers is
       Connection : in out Network.Connections.Connection;
       Remote     : Network.Addresses.Address) is abstract
      with Post'Class => Connection.Has_Listener;
-   --  Once the manager accepts a new connection. It should assign a listener
-   --  to the connection.
+   --  This procedure is called when the connection manager has accepted an
+   --  incoming connection or established an outgoing connection.
+
+   not overriding procedure Rejected
+     (Self   : in out Connection_Listener;
+      Error  : League.Strings.Universal_String;
+      Remote : Network.Addresses.Address) is null;
+   --  This procedure is called when the connection manager has failed to
+   --  establish an outgoing connection.
+
+   procedure Initialize (Self : in out Manager'Class);
+   --  Call Initialize before use
+
+   procedure Connect
+     (Self     : in out Manager'Class;
+      Address  : Network.Addresses.Address;
+      Error    : out League.Strings.Universal_String;
+      Listener : not null Connection_Listener_Access;
+      Options  : League.String_Vectors.Universal_String_Vector :=
+        League.String_Vectors.Empty_Universal_String_Vector);
+   --  Try to connect to given address asynchronously. Notify the listener
+   --  when connection established or rejected. Once notified, the listener is
+   --  no longer in use and can be deleted. Options are protocol dependent.
 
    procedure Listen
      (Self     : in out Manager'Class;
       List     : Network.Addresses.Address_Array;
-      Listener : Connection_Listener_Access;
+      Listener : not null Connection_Listener_Access;
       Error    : out League.Strings.Universal_String;
       Options  : League.String_Vectors.Universal_String_Vector :=
         League.String_Vectors.Empty_Universal_String_Vector);
@@ -64,6 +73,8 @@ package Network.Managers is
 
 private
 
+   type Connection_Access is access all
+     Network.Abstract_Connections.Abstract_Connection'Class;
    type Protocol is limited interface;
    type Protocol_Access is access all Protocol'Class with Storage_Size => 0;
 
@@ -78,19 +89,17 @@ private
    not overriding procedure Listen
      (Self     : in out Protocol;
       List     : Network.Addresses.Address_Array;
-      Listener : Connection_Listener_Access;
-      Poll     : in out Network.Polls.Poll;
+      Listener : not null Connection_Listener_Access;
       Error    : out League.Strings.Universal_String;
       Options  : League.String_Vectors.Universal_String_Vector :=
         League.String_Vectors.Empty_Universal_String_Vector) is abstract;
 
    not overriding procedure Connect
-     (Self    : in out Protocol;
-      Address : Network.Addresses.Address;
-      Poll    : in out Network.Polls.Poll;
-      Error   : out League.Strings.Universal_String;
-      Promise : out Connection_Promises.Promise;
-      Options : League.String_Vectors.Universal_String_Vector :=
+     (Self     : in out Protocol;
+      Address  : Network.Addresses.Address;
+      Error    : out League.Strings.Universal_String;
+      Listener : not null Connection_Listener_Access;
+      Options  : League.String_Vectors.Universal_String_Vector :=
         League.String_Vectors.Empty_Universal_String_Vector) is abstract;
 
    procedure Register
@@ -99,10 +108,26 @@ private
 
    type Protocol_Access_Array is array (Positive range <>) of Protocol_Access;
 
+   package Connection_Vectors is new Ada.Containers.Vectors
+     (Positive, Connection_Access);
+
    type Manager is tagged limited record
-      Poll  : Network.Polls.Poll;
-      Proto : Protocol_Access_Array (1 .. 10);
-      Last  : Natural := 0;
+      Poll    : Network.Polls.Poll;
+      Proto   : Protocol_Access_Array (1 .. 10);
+      Last    : Natural := 0;
+      Deleted : Connection_Vectors.Vector;
    end record;
+
+   procedure New_Connection
+     (Self       : in out Manager;
+      Connection : not null access
+        Network.Abstract_Connections.Abstract_Connection'Class);
+
+   procedure Delete_Connection
+     (Self       : in out Manager;
+      Connection : not null access
+        Network.Abstract_Connections.Abstract_Connection'Class);
+
+   type Manager_Access is access all Network.Managers.Manager;
 
 end Network.Managers;

@@ -1,8 +1,9 @@
---  SPDX-FileCopyrightText: 2021 Max Reznik <reznikmm@gmail.com>
+--  SPDX-FileCopyrightText: 2021-2023 Max Reznik <reznikmm@gmail.com>
 --
 --  SPDX-License-Identifier: MIT
 -------------------------------------------------------------
 
+with Ada.Containers;
 with Ada.Finalization;
 with Ada.Streams;
 
@@ -36,6 +37,11 @@ package Network.Connections is
       Value : Listener_Access);
    --  Assign a listener to the connection. Use this instead of
    --  Set_Input_Listener/Set_Output_Listener.
+
+   function Hash (Self : Connection) return Ada.Containers.Hash_Type;
+   --  Hash function for the connection
+
+   function Null_Connection return Connection;
 
 private
 
@@ -78,5 +84,8 @@ private
       Last : out Ada.Streams.Stream_Element_Offset);
 
    overriding procedure Close (Self : in out Connection);
+
+   function Null_Connection return Connection is
+      (Ada.Finalization.Controlled with Object => null);
 
 end Network.Connections;

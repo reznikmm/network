@@ -1,4 +1,4 @@
---  SPDX-FileCopyrightText: 2022 Max Reznik <reznikmm@gmail.com>
+--  SPDX-FileCopyrightText: 2022-2023 Max Reznik <reznikmm@gmail.com>
 --
 --  SPDX-License-Identifier: MIT
 -------------------------------------------------------------
@@ -7,6 +7,7 @@ with Ada.Exceptions;
 with Interfaces.C;
 
 with Network.Connections.Internal;
+with Network.Managers.TCP_V4;
 with Network.Managers.TCP_V4_In;
 
 package body Network.Managers.TCP_V4_Listen is
@@ -20,11 +21,10 @@ package body Network.Managers.TCP_V4_Listen is
       Events : Network.Polls.Event_Set)
    is
       Remote : GNAT.Sockets.Sock_Addr_Type;
-      Image  : League.Strings.Universal_String;
       Req    : GNAT.Sockets.Request_Type :=
         (GNAT.Sockets.Non_Blocking_IO, Enabled => True);
       Socket : constant TCP_V4_In.In_Socket_Access :=
-        new TCP_V4_In.In_Socket (Self.Poll);
+        new TCP_V4_In.In_Socket (Self.Manager);
    begin
       begin
          GNAT.Sockets.Accept_Socket (Self.Internal, Socket.Internal, Remote);
@@ -32,26 +32,17 @@ package body Network.Managers.TCP_V4_Listen is
          when E : GNAT.Sockets.Socket_Error =>
             Socket.Error := League.Strings.From_UTF_8_String
               (Ada.Exceptions.Exception_Message (E));
+            --  then what???
       end;
 
-      Image.Append ("/ip4/");
-      Image.Append
-        (League.Strings.From_UTF_8_String (GNAT.Sockets.Image (Remote.Addr)));
-      Image.Append ("/tcp/");
-
-      declare
-         Port : constant Wide_Wide_String := Remote.Port'Wide_Wide_Image;
-      begin
-         Image.Append (Port (2 .. Port'Last));
-
-         Socket.Remote := Network.Addresses.To_Address (Image);
-      end;
-
+      Self.Manager.New_Connection (Socket);
+      Socket.Remote := TCP_V4.Remote (Remote);
       GNAT.Sockets.Control_Socket (Socket.Internal, Req);
 
       declare
          Connection : Network.Connections.Connection :=
            Network.Connections.Internal.Cast (Socket);
+         Ignore : Boolean;
       begin
          Self.Listener.Connected
            (Connection => Connection,
@@ -60,10 +51,12 @@ package body Network.Managers.TCP_V4_Listen is
          pragma Assert (Socket.Listener.Assigned);
          Socket.Events := (others => True);
 
-         Self.Poll.Watch
+         Self.Manager.Poll.Watch
            (Interfaces.C.int (GNAT.Sockets.To_C (Socket.Internal)),
             Events   => Socket.Events,
             Listener => Socket.all'Access);
+
+         Ignore := Socket.Dereference;
       end;
    end On_Event;
 
