@@ -7,7 +7,7 @@ This is an asynchronous network library **prototype** for Ada.
 Features:
 
  * [Composable and future-proof network addresses](https://github.com/multiformats/multiaddr)
- * Explicit error messages instead of exceptions
+ * Explicit error callbacks instead of exceptions
  * Single thread applications
  * Linux only for now
 
@@ -15,7 +15,7 @@ Features:
 
 ### Build from sources
 
-Unpack source and run `make`.
+Unpack source and run `make` or use `alr build`.
 
 ### Dependencies
 
@@ -25,11 +25,6 @@ It depends on
 ## Usage
 
 To use as a library, add `with "network";` to your project file.
-
-## Open questions
-
-* How to free connection objects?
-* Add Post'Class on Conntection_Promise.On_Resolve
 
 ## Maintainer
 

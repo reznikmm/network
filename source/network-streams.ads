@@ -54,15 +54,15 @@ package Network.Streams is
      (Self : in out Input_Stream;
       Data : out Ada.Streams.Stream_Element_Array;
       Last : out Ada.Streams.Stream_Element_Offset) is abstract
-        with Pre'Class => Self.Has_Listener and not Self.Is_Closed;
+        with Pre'Class => Self.Has_Listener and not Is_Closed (Self);
    --  Last is set to index of the last read element. If Last < Data'First it
    --  means an incomplete operation, Can_Read notification will be called once
    --  operation can be continued. It's not possible to read date before a
    --  listener assigned or after the stream is closed.
 
    not overriding procedure Close (Self : in out Input_Stream) is abstract
-     with Pre'Class => not Self.Is_Closed,
-          Post'Class => Self.Is_Closed;
+     with Pre'Class => not Is_Closed (Self),
+          Post'Class => Is_Closed (Self);
    --  Close the Stream
 
    -------------------
@@ -109,7 +109,7 @@ package Network.Streams is
      (Self : in out Output_Stream;
       Data : Ada.Streams.Stream_Element_Array;
       Last : out Ada.Streams.Stream_Element_Offset) is abstract
-        with Pre'Class => Self.Has_Listener and not Self.Is_Closed;
+        with Pre'Class => Self.Has_Listener and not Is_Closed (Self);
    --  Last is set to index of the last element to be written. If Last <
    --  Data'Last it means an incomplete operation, Can_Write notification will
    --  be called once operation can be continued. Application is responsible
@@ -117,8 +117,8 @@ package Network.Streams is
    --  read date before a listener assigned or after the stream is closed.
 
    not overriding procedure Close (Self : in out Output_Stream) is abstract
-     with Pre'Class => not Self.Is_Closed,
-          Post'Class => Self.Is_Closed;
+     with Pre'Class => not Is_Closed (Self),
+          Post'Class => Is_Closed (Self);
    --  Close the Stream
 
 end Network.Streams;
